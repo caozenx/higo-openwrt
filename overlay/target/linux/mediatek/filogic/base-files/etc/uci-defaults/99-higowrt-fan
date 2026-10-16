@@ -1,0 +1,30 @@
+#!/bin/sh
+#
+# Hiveton H5000M 风扇默认策略（保守，安全）
+#
+# DTS 里 &fan 是 pwm-fan，带 cooling-levels，正常情况下由内核 thermal 框架
+# 自动调速。本脚本只做一件事：开机时若某路 pwm-fan 输出为 0，则给一个
+# 低速下限(FAN_MIN)，保证风扇不会完全停转 —— 不修改 pwm1_enable，
+# 因此不会关闭 thermal 自动控制（若 thermal 在管，稍后会自动覆盖本值）。
+#
+# FAN_MIN 取值 0..255，默认 64(≈25%)。按实机噪音/温度调，或删掉本文件。
+#
+FAN_MIN="${FAN_MIN:-64}"
+
+[ "$FAN_MIN" -gt 0 ] 2>/dev/null || exit 0
+
+for hw in /sys/class/hwmon/hwmon*; do
+	[ -r "$hw/name" ] || continue
+	[ "$(cat "$hw/name" 2>/dev/null)" = "pwmfan" ] || continue
+
+	pwm="$hw/pwm1"
+	[ -w "$pwm" ] || continue
+
+	cur="$(cat "$pwm" 2>/dev/null || echo 0)"
+	if [ "${cur:-0}" -eq 0 ] 2>/dev/null; then
+		echo "$FAN_MIN" > "$pwm" 2>/dev/null && \
+			logger -t higowrt-fan "fan idle floor set to $FAN_MIN"
+	fi
+done
+
+exit 0

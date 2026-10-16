@@ -1,0 +1,150 @@
+# 工作交接（HANDOFF）
+
+> 给「下一次继续这个项目的人（或未来的你）」看的一页。记录了背景、已完成、关键信息、如何继续。
+
+---
+
+## 0. 背景与目标
+
+- 原始仓库 `/Users/caozheng/Workspace/higowrt`（HiGoWRT）：**官方 OpenWrt `4ccb782af7`（r32933，25.12，内核 6.12）+ MTK MT7987/MT7992 Wi-Fi7 闭源驱动栈移植**，支持 Hiveton H5000M、TP-Link TL-7DR7230。
+- 问题：原始仓库把整棵 OpenWrt 树压成**一个提交**导入（无上游父提交），无法 rebase/merge 上游，也看不出「哪些是官方、哪些是自制」。
+- 目标：**新开一个「增量仓库」= 尽可能贴近官方 + 只保留必要修改 + 流水线自动化构建**。
+
+---
+
+## 1. 本次已完成
+
+### 1.1 分析（相对官方 OpenWrt `4ccb782af7`）
+- 全树 **503 文件不同 = 488 新增 / 14 修改 / 1 删除**。
+- 14 处修改里除「品牌 4 处 + `wifi-scripts` 1 行 hack」外，**全是文件末尾追加**。
+- 新增：`package/mtk` 317、`target/linux/mediatek` 147、主题 17、其余 7。
+- 说明：`MIGRATION_ISSUES.md` 提到的 `immortalwrt-hiveton-mt-6.6` 是**厂商分支**；immortalwrt 官方现在已到 6.18 且**不带 MTK 闭源栈**，所以现实可跟随的上游只有**官方 OpenWrt**。
+- 详细分级清单见 `docs/MANIFEST.md`。
+
+### 1.2 搭建增量仓库 `/Users/caozheng/Workspace/higo-openwrt`
+- Overlay 模型：构建时拉官方源码 + 覆盖 `overlay/` + 打 `patches/` + 用 `configs/`。
+- **已实测验证**：在固定上游提交上，`overlay` + 8 个 `patches` 全部干净应用，最终变更 = 481(overlay) + 12(patch)，与原仓库增量一致（差异仅 `.gitignore`/`README.md` 这类非构建项，以及 8 项已迁移到 `configs//dl//docs/`）。
+
+### 1.3 三项后续工作
+1. **裁剪第三方 LuCI**：删除 `luci-app-mwan3helper-chinaroute`、`luci-app-wrtbwmon`、`wrtbwmon`（无人依赖，defconfig 也未启用）。
+2. **补 PKG_SOURCE_URL + PKG_HASH**：`mt_wifi7`/`mt_hwifi`/`mt_wifi_osal`/`warp`/`datconf` 五个 Makefile 已加私有镜像 URL 与 `PKG_HASH` 占位；新增 `scripts/set-vendor-hashes.sh` 自动填 sha256。
+3. **5G 模组 + 风扇/LED 默认**：
+   - `configs/common.extra`：5G 选包（QMI/MBIM/MHI/ModemManager + LuCI proto + Quectel 工具），`build.sh` 自动追加。
+   - `docs/5G-MODEM.md`：选包说明 + 设备端验证方法与命令。
+   - `overlay/.../usr/bin/higowrt-modem-check`：设备端自检脚本。
+   - `overlay/.../etc/board.d/02_higowrt`：WiFi 2G/5G LED 默认触发。
+   - `overlay/.../etc/uci-defaults/99-higowrt-fan`：风扇低速下限（保守、不关 thermal）。
+
+---
+
+## 2. 仓库结构 `/Users/caozheng/Workspace/higo-openwrt`
+
+```
+upstream.env                 # 上游仓库 + 固定 ref（唯一跟随上游入口）
+overlay/                     # 覆盖进官方树的新增文件
+  package/mtk/               #   MTK 闭源驱动栈 + 原厂工具（已裁掉 3 个第三方 LuCI）
+  package/luci-theme-higowrt/
+  target/linux/mediatek/     #   板级 DTS + files-6.12 源 + patches-6.12
+patches/                     # 对官方已有文件的 8 个补丁
+configs/                     # mt7987_h5000m.config / mt7988_7dr7230.config / common.extra
+dl/                          # 专有 tarball（大文件不入库）+ SHA256SUMS
+scripts/build.sh             # 一键构建
+scripts/fetch-vendor.sh      # 收集 MTK SDK tarball + 生成校验和
+scripts/set-vendor-hashes.sh # 计算并回填 PKG_HASH
+docs/                        # MANIFEST / MIGRATION_ISSUES / 5G-MODEM / HANDOFF(本文件)
+.github/workflows/build.yml  # CI 矩阵构建 + Release
+```
+
+---
+
+## 3. 关键信息（务必知道）
+
+| 项 | 值 |
+|---|---|
+| 上游 pin | `upstream.env: OPENWRT_REF=4ccb782af7194604ee6cc3496e86fdb47f134cec`（= 原仓库 `version` 里的 `r32933-4ccb782af7`） |
+| 内核 | 6.12（`config-6.12`） |
+| 设备 | H5000M = MT7987A + MT7992(BE5040，`SKU_TYPE=BE5040`，WARP `3_1`)；TL-7DR7230 = MT7988A + MT7992(BE7200，WARP `3`) |
+| **一次 build 只出一个芯片** | `CONFIG_WARP_VERSION` / `CHIP_MT*` 是编译期单值 → 分开 job，切芯片前 `CLEAN_CHIP=1` |
+| 闭环 feed | `feeds.conf.default` 用 **hash 固定**（patch 0002），比上游分支名更可复现 |
+| 原厂管理栈 | defconfig 当前启用 `wifi-profile`(原厂 `/sbin/wifi`) + `luci-app-mtk` + `datconf` + `mwctl`；如改回标准栈，需删 `patches/0008` 及上述包 |
+
+### 3.1 专有 tarball（构建硬前提，不入库）
+放到 `dl/` 或私有镜像：
+
+| 文件 | 被哪些包用 |
+|---|---|
+| `mt7993_20250919-39602c.tar.xz` | `mt_wifi7`、`mt_hwifi`（**共用**） |
+| `warp_20250919-9c1cfa.tar.xz` | `warp` |
+| `mt_wifi_osal-a53418.tar.xz` | `mt_wifi_osal` |
+| `datconf-757f9679.tar.bz2` | `datconf`（已在 `dl/`，13KB） |
+
+来源：MTK `mtk-wifi-mt7987-mt7990-mt7992-mt7993-v8.3.1.3` SDK 的 `dl/`。
+**CI 必须能拿到**：用私有 Release（workflow 里的 secret `VL_REPO` / `VL_TOKEN`）或 `DL_BASE_URL`。
+
+### 3.2 8 个补丁（`patches/`）
+`0001` 品牌（可用 `NO_BRAND=1` 跳过）/ `0002` feeds 固定 / `0003` 设备定义 / `0004` H5000M 网口 / `0005` filogic kernel config / `0006` generic kernel config / `0007` mtkhnat 包 / `0008` wifi-scripts 让 `/sbin/wifi`。
+
+---
+
+## 4. 如何继续（常用命令）
+
+```bash
+cd /Users/caozheng/Workspace/higo-openwrt
+
+# 备好专有 tarball（二选一）
+scripts/fetch-vendor.sh /path/to/mtk-sdk/dl
+scripts/set-vendor-hashes.sh          # 顺便把 sha256 回填进 Makefile
+
+# 构建（默认带品牌 + 5G 选包）
+scripts/build.sh h5000m               # 或 7dr7230
+# 尽量贴近官方：      NO_BRAND=1 scripts/build.sh h5000m
+# 切芯片前：          CLEAN_CHIP=1 scripts/build.sh 7dr7230
+# 仅本地文件不做下载：保持 PKG_SOURCE_URL 为 example.com 亦可，只要 dl/ 里有 tarball
+
+# 产物
+ls build/openwrt/bin/targets/mediatek/filogic/
+```
+
+跟随上游：改 `upstream.env:OPENWRT_REF` → 跑 `scripts/build.sh`。若 `patches/` 报 FAIL，用 `git apply --3way` 或手工 rebase 那一个（都是追加式，冲突小）。
+
+CI：`.github/workflows/build.yml` 支持手动触发 / 每周定时 / 打 `v*` tag → 出 `sysupgrade`、`recovery`、`sha256sums` 并建 Release。
+
+---
+
+## 5. 待办 / 未验证（下次优先）
+
+- [ ] **未做完整编译**：本机没有专有 tarball，只验证了「overlay + patches 能干净贴上官方树」。**首次得到 tarball 后必须跑一次 `scripts/build.sh`** 确认能出固件。
+- [ ] 把专有 tarball 放到私有 Release，并在 GitHub 配好 secret `VL_REPO`/`VL_TOKEN`。
+- [ ] `patches/0006` 把 `MEDIATEK_NETSYS_*` 放进 `generic/config-6.12`（影响所有 target），可评估只留在 `mediatek/filogic`。
+- [ ] 进一步裁剪 `overlay`：`mt798x-2p5g-phy-firmware-internal`（已用官方固件，可删）、未用到的 DSA/PHY（`mxl862xx`/`mt753x`/`an8855`/`an8801`）、USB xhci-mtk 厂商测试码 —— 需上机确认后删。
+- [ ] 决定是否改回**标准 wifi 栈**（弃 `wifi-profile`/`luci-app-mtk`/`datconf`/`mwctl`，删 `patches/0008`）。
+- [ ] `NO_BRAND=1` 与 `common.extra` 至少各出一次固件做对比。
+- [ ] 5G 模组：上机确认 `higowrt-modem-check` 输出，按实测精简 `common.extra`。
+
+---
+
+## 6. 已知坑
+
+1. `PKG_HASH:=skip` **不能用**：本地已有 tarball 时 `download.pl` 会判 hash 不匹配直接失败。所以用「真实 URL + `scripts/set-vendor-hashes.sh` 填 sha256」；本地有文件时不会触发下载。
+2. `PKG_SOURCE_URL` **非空**才会启用 OpenWrt 的下载规则；为空时「必须有 dl/ 本地文件」。
+3. `mt_wifi7` 与 `mt_hwifi` **共享** `PKG_BUILD_DIR`，hwifi 的补丁必须并进 wifi7 的 `patches/`（本仓库已如此）。
+4. SKU/CHIP 编译期单值，不能同一次 build 两个芯片。
+5. 链接 `mt_wifi.ko`(≈45MB) 吃内存，建议 ≥8G（CI runner 足够）。
+6. LED：若驱动 `MTK_WIFI7_LED_CONTROL_SUPPORT` 自己点灯，`board.d/02_higowrt` 的 netdev 触发可能冲突，不确定就删该文件。
+7. 风扇：`99-higowrt-fan` 只写低速下限、**不改 `pwm1_enable`**，不影响 thermal；要停用直接删文件。
+
+---
+
+## 7. 关系图
+
+```
+/Users/caozheng/Workspace/higowrt        (原始仓库，本次未改动其工作树；仅加了一个只读 remote `upstream`)
+        │  分析得到增量
+        ▼
+/Users/caozheng/Workspace/higo-openwrt   (新·增量仓库，方案 A)
+        │  构建时
+        ▼
+  官方 OpenWrt @ OPENWRT_REF  +  overlay/  +  patches/  →  固件
+```
+
+> 备注：为做精确对比，原始 `higowrt` 仓库里加过 `git remote add upstream https://github.com/openwrt/openwrt.git`（只读，不影响原有分支）。不再需要可 `git remote remove upstream`。

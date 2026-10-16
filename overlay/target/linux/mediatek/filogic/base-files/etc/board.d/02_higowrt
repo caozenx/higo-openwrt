@@ -1,0 +1,21 @@
+. /lib/functions/leds.sh
+. /lib/functions/uci-defaults.sh
+
+board=$(board_name)
+
+board_config_update
+
+# Hiveton H5000M：两颗 WiFi LED（DTS gpio-leds 的 label 即 sysfs 名 "WiFi_2G" / "WiFi_5G"）
+# 注意：若驱动侧启用了 CONFIG_MTK_WIFI7_LED_CONTROL_SUPPORT 并由固件直接点灯，
+#       这里改用 netdev 触发器可能与之冲突；不确定时删掉本文件即可（LED 会常灭/由驱动控制）。
+case "$board" in
+hiveton,h5000m|\
+hiveton,h5000m-nand)
+	ucidef_set_led_netdev "wifi2g" "WiFi_2G" "WiFi_2G" "phy0-ap0" "link tx rx"
+	ucidef_set_led_netdev "wifi5g" "WiFi_5G" "WiFi_5G" "phy1-ap0" "link tx rx"
+	;;
+esac
+
+board_config_flush
+
+exit 0

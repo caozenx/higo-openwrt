@@ -10,6 +10,9 @@ include $(TOPDIR)/rules.mk
 PKG_NAME:=datconf
 PKG_REVISION:=757f9679
 PKG_SOURCE:=$(PKG_NAME)-$(PKG_REVISION).tar.bz2
+# 源码包已在 dl/ 内；如需让 OpenWrt 自动下载，填 mirror 地址与 sha256
+PKG_SOURCE_URL:=https://example.com/higo-vendor-sdk
+PKG_HASH:=
 PKG_RELEASE:=1
 PKG_USE_NINJA:=0
 

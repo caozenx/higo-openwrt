@@ -10,7 +10,11 @@ PKG_NAME:=mt_wifi7
 P4REV:=
 PKG_VERSION:=1
 PKG_SOURCE:=mt7993_20250919-39602c.tar.xz
-PKG_SOURCE_URL:=
+# 专有 SDK 源码包（不随仓库分发）。私有镜像地址改成你自己的；
+# 不用 mirror 时把 tarball 放到 <openwrt>/dl/ 即可（scripts/build.sh 会自动放）。
+# 运行 scripts/set-vendor-hashes.sh 可自动填充下方 PKG_HASH。
+PKG_SOURCE_URL:=https://example.com/higo-vendor-sdk
+PKG_HASH:=
 PKG_BUILD_DIR:=$(KERNEL_BUILD_DIR)/$(PKG_NAME)
 
 PKG_KCONFIG:= \

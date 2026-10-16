@@ -42,7 +42,7 @@
 | `applications/mt798x-2p5g-phy-firmware-internal` | 2.5G PHY 内置固件 | **建议删**（defconfig 用官方 `mt7987-2p5g-phy-firmware`） |
 | `applications/luci-app-Airpifanctrl` | **风扇**控制 UI | 按需（有 PWM 风扇则留） |
 | `applications/luci-app-eqos-mtk`、`luci-app-turboacc-mtk` | QoS / 硬件加速 UI | 按需 |
-| `applications/luci-app-mwan3helper-chinaroute`、`wrtbwmon`、`luci-app-wrtbwmon` | 第三方分流/流量统计 | **可删**（defconfig 未启用） |
+| `applications/luci-app-mwan3helper-chinaroute`、`wrtbwmon`、`luci-app-wrtbwmon` | 第三方分流/流量统计 | **已删**（无人依赖、defconfig 未启用） |
 
 ### B. `overlay/target/linux/mediatek/`（147）
 
@@ -77,7 +77,7 @@
 | **无线 RF** | 各 profile `configs/*.config` 里的 `MTK_WIFI7_*_IF_RF_OFFSET`、`FIRST_IF_IPAILNA`/`SECOND_IF_EPAELNA`、`SKU_TYPE`；2.5G/PHY 固件包 |
 | **风扇** | DTS `&fan (pwm-fan)` + thermal cooling + `overlay/package/mtk/applications/luci-app-Airpifanctrl` |
 | **LED** | DTS `gpio-leds`(WiFi_2G/WiFi_5G) + `kmod-leds-gpio` + `MTK_WIFI7_LED_CONTROL_SUPPORT` |
-| **5G 模组** | ⚠️ 目前**未启用任何蜂窝栈**，仅 HNAT `ext-devices-prefix="usb","wwan","rmnet"`。要用需在 `configs/*.config` 增加：`kmod-usb-net-qmi-wwan`（或 `kmod-usb-net-cdc-mbim`）、`kmod-mhi-wwan-*`、`uqmi`/`umbim` 或 `ModemManager`、`luci-proto-qmi`/`mbim`，以及 feed 的 `bsbf-quectel-usbnet`、`quectel-timesync`；USB 侧 DTS `&ssusb` 已 `okay` |
+| **5G 模组** | 原仓库**未启用任何蜂窝栈**（仅 HNAT `ext-devices-prefix="usb","wwan","rmnet"`）。新仓库已通过 `configs/common.extra` 提供选包（`kmod-usb-net-qmi-wwan`/`cdc-mbim`/`kmod-mhi-wwan-*`、`uqmi`/`umbim`/`modemmanager`、`luci-proto-qmi|mbim|modemmanager`、`bsbf-quectel-usbnet`、`quectel-timesync`）；USB 侧 DTS `&ssusb` 已 `okay`。详见 `docs/5G-MODEM.md` |
 
 ---
 
@@ -85,11 +85,22 @@
 
 | 原 higowrt | 新仓库 |
 |---|---|
-| `package/mtk/**`（新增） | `overlay/package/mtk/**` |
+| `package/mtk/**`（新增） | `overlay/package/mtk/**`（已裁掉 `luci-app-mwan3helper-chinaroute`、`luci-app-wrtbwmon`、`wrtbwmon`） |
 | `target/linux/mediatek/{dts,files-6.12,patches-6.12}`（新增） | `overlay/target/linux/mediatek/**` |
 | `package/luci-theme-higowrt/**` | `overlay/package/luci-theme-higowrt/**` |
-| 14 个被改的官方文件 | `patches/*.patch` |
-| `defconfig/*.config` | `configs/*.config` |
+| 14 个被改的官方文件 | `patches/*.patch`（8 个） |
+| `defconfig/*.config` | `configs/mt7987_h5000m.config`、`configs/mt7988_7dr7230.config` |
 | `_prep_build.sh` | `scripts/build.sh` |
 | `MIGRATION_ISSUES.md` | `docs/MIGRATION_ISSUES.md` |
 | `.github/workflows/build-on-comment.yml`（OpenWrt 自带，不适用于本 fork） | `.github/workflows/build.yml`（本 fork 的矩阵构建） |
+
+## 五、新仓库新增（原仓库没有）
+
+| 路径 | 作用 |
+|---|---|
+| `configs/common.extra` | 5G 模组选包片段（`build.sh` 自动追加） |
+| `scripts/fetch-vendor.sh`、`scripts/set-vendor-hashes.sh` | 收集专有 tarball / 回填 `PKG_HASH` |
+| `overlay/target/linux/mediatek/filogic/base-files/etc/board.d/02_higowrt` | WiFi 2G/5G LED 默认 |
+| `overlay/target/linux/mediatek/filogic/base-files/etc/uci-defaults/99-higowrt-fan` | 风扇默认（低速下限） |
+| `overlay/target/linux/mediatek/filogic/base-files/usr/bin/higowrt-modem-check` | 5G 模组自检 |
+| `docs/5G-MODEM.md`、`docs/HANDOFF.md` | 5G 说明 / 工作交接 |

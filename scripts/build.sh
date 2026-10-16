@@ -111,6 +111,13 @@ log "feeds update/install"
 
 log "写入配置: $(basename "$CFG")"
 cp -f "$CFG" "$O/.config"
+# 追加可选功能配置片段（5G 模组等）；后出现的选择覆盖前面的，随后 make defconfig 解析
+for frag in "$REPO_DIR/configs/common.extra" "$REPO_DIR/configs/${PROFILE}.extra"; do
+  if [[ -f "$frag" ]]; then
+    log "追加配置片段: $(basename "$frag")"
+    cat "$frag" >> "$O/.config"
+  fi
+done
 ( cd "$O" && make defconfig )
 
 if [[ "${CLEAN_CHIP:-0}" == "1" ]]; then

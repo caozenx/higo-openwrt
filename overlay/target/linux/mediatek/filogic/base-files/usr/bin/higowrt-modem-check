@@ -1,0 +1,37 @@
+#!/bin/sh
+#
+# higowrt-modem-check —— 5G/4G 模组接入自检
+# 只读诊断：列出 USB 模组、串口、QMI/MBIM 设备与网络接口，并给出下一步建议。
+#
+echo "== USB 设备（找 Quectel/Fibocom/Meig/Huawei…） =="
+( lsusb 2>/dev/null || cat /sys/kernel/debug/usb/devices 2>/dev/null | grep -E "Vendor|Product|Manufacturer" ) | \
+  grep -iE "quectel|fibocom|meig|huawei|simcom|telit|thales|5g|modem|mobile|2c7c|2dee|2cb7|12d1" || \
+  echo "  (未发现明显模组；确认已插好、供电足够、&ssusb 为 okay)"
+
+echo
+echo "== 串口 (AT 口) =="
+for d in /dev/ttyUSB* /dev/ttyACM* /dev/cdc-wdm* /dev/wwan*; do
+	[ -e "$d" ] && echo "  $d"
+done
+
+echo
+echo "== 网络接口 =="
+ip -o link show 2>/dev/null | awk -F': ' '{print "  "$2}'
+
+echo
+echo "== 内核识别到的 WWAN 驱动 =="
+lsmod 2>/dev/null | grep -iE "qmi_wwan|cdc_mbim|cdc_ncm|option|mhi|rmnet|usbnet|usb_wwan" | awk '{print "  "$1}'
+
+echo
+echo "== 建议 =="
+if [ -e /dev/cdc-wdm0 ]; then
+	echo "  QMI 设备存在，可:  uqmi -d /dev/cdc-wdm0 --get-data-status"
+	echo "  然后在 LuCI(网络->接口) 新建协议 'QMI Cellular' 或 'ModemManager'"
+elif [ -e /dev/wwan0mbim0 ]; then
+	echo "  MBIM 设备存在，可:  mbimcli -d /dev/wwan0mbim0 -p --query-device-caps"
+	echo "  然后在 LuCI 新建协议 'MBIM' 或 'ModemManager'"
+else
+	echo "  未发现 QMI/MBIM 控制设备："
+	echo "   - 确认 configs/common.extra 的 5G 包已编入 (scripts/build.sh 会自动追加)"
+	echo "   - 部分模组需要 usb-modeswitch 从存储模式切到 modem 模式"
+fi

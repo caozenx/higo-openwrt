@@ -5,6 +5,9 @@ PKG_NAME:=mt_wifi_osal
 PKG_RELEASE:=1
 PKG_BUILD_DIR:=$(KERNEL_BUILD_DIR)/$(PKG_NAME)/wifi_osal
 PKG_SOURCE:=mt_wifi_osal-a53418.tar.xz
+# 专有 SDK 源码包（不随仓库分发）。见 mt_wifi7/Makefile 说明。
+PKG_SOURCE_URL:=https://example.com/higo-vendor-sdk
+PKG_HASH:=
 
 include $(INCLUDE_DIR)/package.mk
 
