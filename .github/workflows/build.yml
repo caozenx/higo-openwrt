@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       profile:
-        description: "要构建的 profile（留空=全部）"
+        description: "只构建某个 profile（留空=全部）"
         required: false
         type: choice
         options: ["", "h5000m", "7dr7230"]
@@ -18,26 +18,36 @@ permissions:
 
 # WARP_VERSION / CHIP 是编译期单值，不同芯片必须分开 job 构建
 jobs:
+  # job 级 if 拿不到 matrix 上下文，所以先用 prepare 生成 matrix
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.m.outputs.matrix }}
+    steps:
+      - id: m
+        run: |
+          ALL='[
+            {"profile":"h5000m","config":"mt7987_h5000m","chip":"mt7987"},
+            {"profile":"7dr7230","config":"mt7988_7dr7230","chip":"mt7988"}
+          ]'
+          SEL="${{ github.event.inputs.profile }}"
+          if [ -n "$SEL" ]; then
+            M=$(echo "$ALL" | jq -c --arg p "$SEL" '[.[] | select(.profile==$p)]')
+          else
+            M=$(echo "$ALL" | jq -c .)
+          fi
+          echo "matrix={\"include\":$M}" >> "$GITHUB_OUTPUT"
+
   build:
+    needs: prepare
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - profile: h5000m
-            config: mt7987_h5000m
-            chip: mt7987
-          - profile: 7dr7230
-            config: mt7988_7dr7230
-            chip: mt7988
-    # 允许 workflow_dispatch 指定单个 profile
-    if: ${{ github.event.inputs.profile == '' || github.event.inputs.profile == matrix.profile }}
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
     runs-on: ubuntu-latest
     timeout-minutes: 360
 
     env:
       PROFILE: ${{ matrix.profile }}
-      CONFIG: ${{ matrix.config }}
-      CHIP: ${{ matrix.chip }}
 
     steps:
       - uses: actions/checkout@v4
