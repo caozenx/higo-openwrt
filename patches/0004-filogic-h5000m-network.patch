@@ -1,0 +1,15 @@
+diff --git a/target/linux/mediatek/filogic/base-files/etc/board.d/02_network b/target/linux/mediatek/filogic/base-files/etc/board.d/02_network
+index 545eeb7..a680971 100644
+--- a/target/linux/mediatek/filogic/base-files/etc/board.d/02_network
++++ b/target/linux/mediatek/filogic/base-files/etc/board.d/02_network
+@@ -8,6 +8,10 @@ mediatek_setup_interfaces()
+ 	local board="$1"
+ 
+ 	case $board in
++	hiveton,h5000m|\
++	hiveton,h5000m-nand)
++		ucidef_set_interfaces_lan_wan "eth1 hnat" eth0
++		;;
+ 	abt,asr3000|\
+ 	buffalo,wsr-6000ax8|\
+ 	cmcc,rax3000m|\

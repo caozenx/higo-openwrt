@@ -1,0 +1,122 @@
+diff --git a/include/version.mk b/include/version.mk
+index 0f0d8b0..029dc4f 100644
+--- a/include/version.mk
++++ b/include/version.mk
+@@ -27,32 +27,32 @@ PKG_CONFIG_DEPENDS += \
+ sanitize = $(call tolower,$(subst _,-,$(subst $(space),-,$(1))))
+ 
+ VERSION_NUMBER:=$(call qstrip,$(CONFIG_VERSION_NUMBER))
+-VERSION_NUMBER:=$(if $(VERSION_NUMBER),$(VERSION_NUMBER),25.12-SNAPSHOT)
++VERSION_NUMBER:=$(if $(VERSION_NUMBER),$(VERSION_NUMBER),25.12.4)
+ 
+ VERSION_CODE:=$(call qstrip,$(CONFIG_VERSION_CODE))
+-VERSION_CODE:=$(if $(VERSION_CODE),$(VERSION_CODE),$(REVISION))
++VERSION_CODE:=$(if $(VERSION_CODE),$(VERSION_CODE),r32933-4ccb782af7)
+ 
+ VERSION_REPO:=$(call qstrip,$(CONFIG_VERSION_REPO))
+-VERSION_REPO:=$(if $(VERSION_REPO),$(VERSION_REPO),https://downloads.openwrt.org/releases/25.12-SNAPSHOT)
++VERSION_REPO:=$(if $(VERSION_REPO),$(VERSION_REPO),https://downloads.openwrt.org/releases/25.12.4)
+ 
+ VERSION_DIST:=$(call qstrip,$(CONFIG_VERSION_DIST))
+-VERSION_DIST:=$(if $(VERSION_DIST),$(VERSION_DIST),OpenWrt)
++VERSION_DIST:=$(if $(VERSION_DIST),$(VERSION_DIST),HiGoWRT)
+ VERSION_DIST_SANITIZED:=$(call sanitize,$(VERSION_DIST))
+ 
+ VERSION_MANUFACTURER:=$(call qstrip,$(CONFIG_VERSION_MANUFACTURER))
+-VERSION_MANUFACTURER:=$(if $(VERSION_MANUFACTURER),$(VERSION_MANUFACTURER),OpenWrt)
++VERSION_MANUFACTURER:=$(if $(VERSION_MANUFACTURER),$(VERSION_MANUFACTURER),HiGoWRT)
+ 
+ VERSION_MANUFACTURER_URL:=$(call qstrip,$(CONFIG_VERSION_MANUFACTURER_URL))
+-VERSION_MANUFACTURER_URL:=$(if $(VERSION_MANUFACTURER_URL),$(VERSION_MANUFACTURER_URL),https://openwrt.org/)
++VERSION_MANUFACTURER_URL:=$(if $(VERSION_MANUFACTURER_URL),$(VERSION_MANUFACTURER_URL),https://www.higoos.cn/)
+ 
+ VERSION_BUG_URL:=$(call qstrip,$(CONFIG_VERSION_BUG_URL))
+-VERSION_BUG_URL:=$(if $(VERSION_BUG_URL),$(VERSION_BUG_URL),https://bugs.openwrt.org/)
++VERSION_BUG_URL:=$(if $(VERSION_BUG_URL),$(VERSION_BUG_URL),https://www.higoos.cn/)
+ 
+ VERSION_HOME_URL:=$(call qstrip,$(CONFIG_VERSION_HOME_URL))
+-VERSION_HOME_URL:=$(if $(VERSION_HOME_URL),$(VERSION_HOME_URL),https://openwrt.org/)
++VERSION_HOME_URL:=$(if $(VERSION_HOME_URL),$(VERSION_HOME_URL),https://www.higoos.cn/)
+ 
+ VERSION_SUPPORT_URL:=$(call qstrip,$(CONFIG_VERSION_SUPPORT_URL))
+-VERSION_SUPPORT_URL:=$(if $(VERSION_SUPPORT_URL),$(VERSION_SUPPORT_URL),https://forum.openwrt.org/)
++VERSION_SUPPORT_URL:=$(if $(VERSION_SUPPORT_URL),$(VERSION_SUPPORT_URL),https://www.higoos.cn/)
+ 
+ VERSION_FIRMWARE_URL:=$(call qstrip,$(CONFIG_VERSION_FIRMWARE_URL))
+ VERSION_FIRMWARE_URL:=$(if $(VERSION_FIRMWARE_URL),$(VERSION_FIRMWARE_URL),https://downloads.openwrt.org/)
+diff --git a/package/base-files/files/bin/config_generate b/package/base-files/files/bin/config_generate
+index 18fae05..bc981ae 100755
+--- a/package/base-files/files/bin/config_generate
++++ b/package/base-files/files/bin/config_generate
+@@ -313,7 +313,7 @@ generate_static_system() {
+ 	uci -q batch <<-EOF
+ 		delete system.@system[0]
+ 		add system system
+-		set system.@system[-1].hostname='OpenWrt'
++		set system.@system[-1].hostname='HiGoWRT'
+ 		set system.@system[-1].timezone='GMT0'
+ 		set system.@system[-1].zonename='UTC'
+ 		set system.@system[-1].ttylogin='0'
+diff --git a/package/base-files/files/etc/banner b/package/base-files/files/etc/banner
+index e871a96..ab353e5 100644
+--- a/package/base-files/files/etc/banner
++++ b/package/base-files/files/etc/banner
+@@ -1,8 +1,8 @@
+-  _______                     ________        __
+- |       |.-----.-----.-----.|  |  |  |.----.|  |_
+- |   -   ||  _  |  -__|     ||  |  |  ||   _||   _|
+- |_______||   __|_____|__|__||________||__|  |____|
+-          |__| W I R E L E S S   F R E E D O M
++ _   _ _  ____       __        ______ _____
++| | | (_)/ ___| ___  \ \      / /  _ \_   _|
++| |_| | | |  _ / _ \  \ \ /\ / /| |_) || |
++|  _  | | |_| | (_) |  \ V  V / |  _ < | |
++|_| |_|_|\____|\___/    \_/\_/  |_| \_\|_|
+  -----------------------------------------------------
+- %D %V, %C Dave's Guitar
++ %D %V, %C
+  -----------------------------------------------------
+diff --git a/package/base-files/files/etc/banner.failsafe b/package/base-files/files/etc/banner.failsafe
+index 49855e7..ec56974 100644
+--- a/package/base-files/files/etc/banner.failsafe
++++ b/package/base-files/files/etc/banner.failsafe
+@@ -8,7 +8,7 @@ after mount_root:
+ * /etc/config		    directory with config files
+ 
+ for more help see:
+-https://openwrt.org/docs/guide-user/troubleshooting/
++https://www.higoos.cn/
+ - failsafe_and_factory_reset
+ - root_password_reset
+ =======================================================
+diff --git a/package/base-files/image-config.in b/package/base-files/image-config.in
+index 5c3e157..8d1c3f0 100644
+--- a/package/base-files/image-config.in
++++ b/package/base-files/image-config.in
+@@ -173,7 +173,7 @@ if VERSIONOPT
+ 	config VERSION_DIST
+ 		string
+ 		prompt "Release distribution"
+-		default "OpenWrt"
++		default "HiGoWRT"
+ 		help
+ 			This is the name of the release distribution.
+ 			If unspecified, it defaults to OpenWrt.
+@@ -198,7 +198,7 @@ if VERSIONOPT
+ 	config VERSION_REPO
+ 		string
+ 		prompt "Release repository"
+-		default "https://downloads.openwrt.org/releases/25.12-SNAPSHOT"
++		default "https://downloads.openwrt.org/releases/25.12.4"
+ 		help
+ 			This is the repository address embedded in the image, it defaults
+ 			to the trunk snapshot repo; the url may contain the following placeholders:
+@@ -280,7 +280,7 @@ if VERSIONOPT
+ 	config VERSION_CODE_FILENAMES
+ 		bool
+ 		prompt "Revision code in filenames"
+-		default y
++		default n
+ 		help
+ 			Enable this to include the revision identifier or the configured
+ 			version code into the firmware image, SDK- and Image Builder archive

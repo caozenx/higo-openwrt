@@ -1,0 +1,4 @@
+# 大体积专有 SDK 包不入库（见 dl/README.md）
+mt7993_*.tar.xz
+warp_*.tar.xz
+mt_wifi_osal-*.tar.xz

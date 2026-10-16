@@ -1,0 +1,10 @@
+diff --git a/target/linux/mediatek/filogic/config-6.12 b/target/linux/mediatek/filogic/config-6.12
+index 1fae94f..b7bd3a1 100644
+--- a/target/linux/mediatek/filogic/config-6.12
++++ b/target/linux/mediatek/filogic/config-6.12
+@@ -533,3 +533,5 @@ CONFIG_ZONE_DMA32=y
+ CONFIG_ZSTD_COMMON=y
+ CONFIG_ZSTD_COMPRESS=y
+ CONFIG_ZSTD_DECOMPRESS=y
++# CONFIG_NF_FLOW_TABLE_NETLINK is not set
++CONFIG_NET_MEDIATEK_HNAT=m

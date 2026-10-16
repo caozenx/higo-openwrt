@@ -1,0 +1,27 @@
+diff --git a/package/kernel/linux/modules/netdevices.mk b/package/kernel/linux/modules/netdevices.mk
+index 61a9c69..8ebd01d 100644
+--- a/package/kernel/linux/modules/netdevices.mk
++++ b/package/kernel/linux/modules/netdevices.mk
+@@ -2362,3 +2362,22 @@ define KernelPackage/sparx5-switch/description
+ endef
+ 
+ $(eval $(call KernelPackage,sparx5-switch))
++
++define KernelPackage/mediatek_hnat
++  SUBMENU:=$(NETWORK_DEVICES_MENU)
++  TITLE:=Mediatek HNAT module
++  AUTOLOAD:=$(call AutoLoad,20,mtkhnat)
++  DEPENDS:=@TARGET_mediatek +kmod-nf-conntrack +wireless-tools +@KERNEL_WIRELESS_EXT
++  KCONFIG:= \
++	CONFIG_BRIDGE_NETFILTER=y \
++	CONFIG_NETFILTER_FAMILY_BRIDGE=y \
++	CONFIG_NET_MEDIATEK_HNAT
++  FILES:= \
++	$(LINUX_DIR)/drivers/net/ethernet/mediatek/mtk_hnat/mtkhnat.ko
++endef
++
++define KernelPackage/mediatek_hnat/description
++  Kernel modules for MediaTek HW NAT offloading
++endef
++
++$(eval $(call KernelPackage,mediatek_hnat))
