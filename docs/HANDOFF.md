@@ -6,7 +6,7 @@
 
 ## 0. 背景与目标
 
-- 原始仓库 `/Users/caozheng/Workspace/higowrt`（HiGoWRT）：**官方 OpenWrt `4ccb782af7`（r32933，25.12，内核 6.12）+ MTK MT7987/MT7992 Wi-Fi7 闭源驱动栈移植**，支持 Hiveton H5000M、TP-Link TL-7DR7230。
+- 原始仓库 `~/Workspace/higowrt`（HiGoWRT）：**官方 OpenWrt `4ccb782af7`（r32933，25.12，内核 6.12）+ MTK MT7987/MT7992 Wi-Fi7 闭源驱动栈移植**，支持 Hiveton H5000M、TP-Link TL-7DR7230。
 - 问题：原始仓库把整棵 OpenWrt 树压成**一个提交**导入（无上游父提交），无法 rebase/merge 上游，也看不出「哪些是官方、哪些是自制」。
 - 目标：**新开一个「增量仓库」= 尽可能贴近官方 + 只保留必要修改 + 流水线自动化构建**。
 
@@ -21,7 +21,7 @@
 - 说明：`MIGRATION_ISSUES.md` 提到的 `immortalwrt-hiveton-mt-6.6` 是**厂商分支**；immortalwrt 官方现在已到 6.18 且**不带 MTK 闭源栈**，所以现实可跟随的上游只有**官方 OpenWrt**。
 - 详细分级清单见 `docs/MANIFEST.md`。
 
-### 1.2 搭建增量仓库 `/Users/caozheng/Workspace/higo-openwrt`
+### 1.2 搭建增量仓库 `~/Workspace/higo-openwrt`
 - Overlay 模型：构建时拉官方源码 + 覆盖 `overlay/` + 打 `patches/` + 用 `configs/`。
 - **已实测验证**：在固定上游提交上，`overlay` + 8 个 `patches` 全部干净应用，最终变更 = 481(overlay) + 12(patch)，与原仓库增量一致（差异仅 `.gitignore`/`README.md` 这类非构建项，以及 8 项已迁移到 `configs//dl//docs/`）。
 
@@ -37,7 +37,7 @@
 
 ---
 
-## 2. 仓库结构 `/Users/caozheng/Workspace/higo-openwrt`
+## 2. 仓库结构 `~/Workspace/higo-openwrt`
 
 ```
 upstream.env                 # 上游仓库 + 固定 ref（唯一跟随上游入口）
@@ -89,7 +89,7 @@ docs/                        # MANIFEST / MIGRATION_ISSUES / 5G-MODEM / HANDOFF(
 ## 4. 如何继续（常用命令）
 
 ```bash
-cd /Users/caozheng/Workspace/higo-openwrt
+cd ~/Workspace/higo-openwrt
 
 # 备好专有 tarball（二选一）
 scripts/fetch-vendor.sh /path/to/mtk-sdk/dl
@@ -138,10 +138,10 @@ CI：`.github/workflows/build.yml` 支持手动触发 / 每周定时 / 打 `v*` 
 ## 7. 关系图
 
 ```
-/Users/caozheng/Workspace/higowrt        (原始仓库，本次未改动其工作树；仅加了一个只读 remote `upstream`)
+~/Workspace/higowrt        (原始仓库，本次未改动其工作树；仅加了一个只读 remote `upstream`)
         │  分析得到增量
         ▼
-/Users/caozheng/Workspace/higo-openwrt   (新·增量仓库，方案 A)
+~/Workspace/higo-openwrt   (新·增量仓库，方案 A)
         │  构建时
         ▼
   官方 OpenWrt @ OPENWRT_REF  +  overlay/  +  patches/  →  固件
