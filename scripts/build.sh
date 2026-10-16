@@ -10,23 +10,25 @@
 #   -> bin/targets/mediatek/filogic/*
 #
 # 用法:
-#   scripts/build.sh <profile> [选项]
-#   profile: h5000m | 7dr7230            (对应 configs/mt7987_h5000m.config 等)
+#   scripts/build.sh [h5000m] [选项]
+#   profile: h5000m                      （对应 configs/mt7987_h5000m.config）
+#            本仓库只支持 Hiveton H5000M 一个设备，省略参数即默认 h5000m。
 #
 # 选项(环境变量):
 #   BUILD_ROOT=<dir>   构建根目录，默认 ./build
 #   DL_DIR=<dir>       本地专有 tarball 目录，默认 ./dl
 #   DL_BASE_URL=<url>  本地缺失时从此 URL 下载
 #   NO_BRAND=1         跳过品牌补丁(0001)，得到“接近官方”的版本
+#   SKU=<值>           覆盖 CONFIG_MTK_WIFI7_SKU_TYPE（默认 BE5040）
 #   JOBS=<n>           make -j 并行度，默认 nproc
-#   CLEAN_CHIP=1       切换芯片前清理 mt_wifi7 构建目录(WARP_VERSION 单值)
+#   CLEAN_CHIP=1       换 SKU/芯片前清理 mt_wifi7 构建目录(WARP_VERSION 单值)
 #
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PROFILE="${1:-}"
-if [[ -z "$PROFILE" ]]; then
-  echo "用法: $0 <h5000m|7dr7230>" >&2
+PROFILE="${1:-h5000m}"
+if [[ "$PROFILE" != "h5000m" ]]; then
+  echo "用法: $0 [h5000m]   （本仓库只支持 Hiveton H5000M）" >&2
   exit 1
 fi
 
@@ -34,8 +36,7 @@ fi
 source "$REPO_DIR/upstream.env"
 
 CFG="$REPO_DIR/configs/mt7987_${PROFILE}.config"
-[[ -f "$CFG" ]] || CFG="$REPO_DIR/configs/mt7988_${PROFILE}.config"
-[[ -f "$CFG" ]] || { echo "找不到 profile 配置: $PROFILE" >&2; exit 1; }
+[[ -f "$CFG" ]] || { echo "找不到 profile 配置: $CFG" >&2; exit 1; }
 
 BUILD_ROOT="${BUILD_ROOT:-$REPO_DIR/build}"
 O="$BUILD_ROOT/openwrt"
@@ -118,6 +119,13 @@ for frag in "$REPO_DIR/configs/common.extra" "$REPO_DIR/configs/${PROFILE}.extra
     cat "$frag" >> "$O/.config"
   fi
 done
+
+# SKU 覆盖（defconfig 里默认 BE5040；实机验证时可用 SKU=BE3600SDB 做 A/B）
+if [[ -n "${SKU:-}" ]]; then
+  log "覆盖 SKU: CONFIG_MTK_WIFI7_SKU_TYPE=\"$SKU\""
+  echo "CONFIG_MTK_WIFI7_SKU_TYPE=\"$SKU\"" >> "$O/.config"
+fi
+
 ( cd "$O" && make defconfig )
 
 if [[ "${CLEAN_CHIP:-0}" == "1" ]]; then

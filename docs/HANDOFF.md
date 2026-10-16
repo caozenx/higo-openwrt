@@ -7,6 +7,7 @@
 ## 0. 背景与目标
 
 - 原始仓库 `~/Workspace/higowrt`（HiGoWRT）：**官方 OpenWrt `4ccb782af7`（r32933，25.12，内核 6.12）+ MTK MT7987/MT7992 Wi-Fi7 闭源驱动栈移植**，支持 Hiveton H5000M、TP-Link TL-7DR7230。
+- **本仓库已收窄为只支持 Hiveton H5000M**（MT7987A + MT7992，eMMC）：删掉了 TL-7DR7230（MT7988）的 DTS / 设备定义 / defconfig / CI 项；共享的 MTK 驱动代码原样保留（不做编译验证不了的风险裁剪）。
 - 问题：原始仓库把整棵 OpenWrt 树压成**一个提交**导入（无上游父提交），无法 rebase/merge 上游，也看不出「哪些是官方、哪些是自制」。
 - 目标：**新开一个「增量仓库」= 尽可能贴近官方 + 只保留必要修改 + 流水线自动化构建**。
 
@@ -35,6 +36,42 @@
    - `overlay/.../etc/board.d/02_higowrt`：WiFi 2G/5G LED 默认触发。
    - `overlay/.../etc/uci-defaults/99-higowrt-fan`：风扇低速下限（保守、不关 thermal）。
 
+### 1.4 收窄为「只支持 H5000M」
+- 删除 `configs/mt7988_7dr7230.config`、`overlay/.../dts/mt7988d-tplink-tl-7dr7230-rev1.0-sp2.dts`。
+- `patches/0003` 去掉 `tplink_tl-7dr7230-rev1.0-sp2` 设备定义（已重新生成、并实测可干净贴在官方树上）。
+- `scripts/build.sh` / `build-docker.sh`：profile 只接受 `h5000m`（可省略）。
+- CI 由「两 profile 矩阵」简化为**单个 job**（顺手修掉了原来 job 级 `if` 用 `matrix` 导致 push/schedule 不构建的 bug）。
+- README / MANIFEST / HANDOFF 同步更新。
+
+### 1.5 Wi-Fi SKU 调查结论（重要）
+原仓库有两个自相矛盾的说法，本次查清了：
+
+| 来源 | 说法 |
+|---|---|
+| 原仓库最终 defconfig `defconfig/mt7987_mt7992.config` | `SKU_TYPE="BE5040"`（实际出包的配置） |
+| `MIGRATION_ISSUES.md` §6.1 | 「h5000m SKU = BE3600SDB」（**与最终代码不符，仍保留为历史档案**） |
+| 原仓库 README「支持设备」表 | H5000M = MT7992 **(BE3600)**（这是产品速率档位/营销名）；同页「芯片↔SKU」表又写 MT7991→BE5040（自相矛盾） |
+| 你提供的设备规格 | MT7992 (BE3600) |
+
+**结论：保持 `BE5040`**，决定性证据是原厂随包数据：
+
+```
+overlay/package/mtk/drivers/wifi-profile/files/mt7992-be5400/l1profile.dat
+  INDEX0_init_path = /etc/wireless/mediatek/mt7992.5040.1.dat        ← 5040 计划
+    └─ BN0_profile_path=.../mt7992.b0.dat ; BN1_profile_path=.../mt7992.b1.dat   ← 双频 b0+b1
+```
+
+且 `wifi-profile` 的 install 规则里，`first_card_name=MT7992` 就**无条件**装这套 5040 数据，**不因 `SKU_TYPE` 而变**
+→ MTK 对 MT7992 的参考计划本来就是 5040，H5000M 用它自洽。
+
+另外两个常识点（回答「原仓库为什么是 BE5040」）：
+- `CONFIG_MTK_WIFI7_SKU_TYPE` 是**驱动包级自由字符串**（`mt_wifi7/config.in`，`default "BE19000"`），
+  和 device 选择**没有任何联动**，每个 defconfig 都是手工写死的。
+- `make menuconfig` 里的 `Target Profile → Hiveton H5000M` 只决定 DTS/网口/设备包，**不会**帮你选 SKU。
+
+> ⚠️ **仍未上真机验证**：原移植全程在 x86 虚拟机上，Wi-Fi 从未在真实 H5000M 上跑过（见 `MIGRATION_ISSUES.md` §9.9）。
+> 因此 `build.sh` 加了 `SKU=<值>` 覆盖开关，实机若发现频段异常，直接 `SKU=BE3600SDB scripts/build.sh h5000m` 出第二个包做 A/B。
+
 ---
 
 ## 2. 仓库结构 `~/Workspace/higo-openwrt`
@@ -46,14 +83,17 @@ overlay/                     # 覆盖进官方树的新增文件
   package/luci-theme-higowrt/
   target/linux/mediatek/     #   板级 DTS + files-6.12 源 + patches-6.12
 patches/                     # 对官方已有文件的 8 个补丁
-configs/                     # mt7987_h5000m.config / mt7988_7dr7230.config / common.extra
+configs/                     # mt7987_h5000m.config（唯一 profile）/ common.extra
 dl/                          # 专有 tarball（大文件不入库）+ SHA256SUMS
 scripts/build.sh             # 一键构建
+scripts/build-docker.sh      # Docker 构建（macOS/Windows）
 scripts/fetch-vendor.sh      # 收集 MTK SDK tarball + 生成校验和
 scripts/set-vendor-hashes.sh # 计算并回填 PKG_HASH
 docs/                        # MANIFEST / MIGRATION_ISSUES / 5G-MODEM / HANDOFF(本文件)
-.github/workflows/build.yml  # CI 矩阵构建 + Release
+.github/workflows/build.yml  # CI 单 profile 构建 + Release
 ```
+
+远端：`git@github.com:caozenx/higo-openwrt.git`（公开，分支 `main`）。
 
 ---
 
@@ -63,8 +103,9 @@ docs/                        # MANIFEST / MIGRATION_ISSUES / 5G-MODEM / HANDOFF(
 |---|---|
 | 上游 pin | `upstream.env: OPENWRT_REF=4ccb782af7194604ee6cc3496e86fdb47f134cec`（= 原仓库 `version` 里的 `r32933-4ccb782af7`） |
 | 内核 | 6.12（`config-6.12`） |
-| 设备 | H5000M = MT7987A + MT7992(BE5040，`SKU_TYPE=BE5040`，WARP `3_1`)；TL-7DR7230 = MT7988A + MT7992(BE7200，WARP `3`) |
-| **一次 build 只出一个芯片** | `CONFIG_WARP_VERSION` / `CHIP_MT*` 是编译期单值 → 分开 job，切芯片前 `CLEAN_CHIP=1` |
+| 设备（**唯一**） | H5000M = MT7987A + MT7992，`SKU_TYPE=BE5040`，`WARP_CHIPSET=mt7987`，`WARP_VERSION=3_1`，eMMC 启动 |
+| Wi-Fi SKU | `BE5040`（理由见 §1.5）；可用 `SKU=... scripts/build.sh` 覆盖；**未上真机验证** |
+| 编译期单值 | `CONFIG_WARP_CHIPSET` / `CONFIG_WARP_VERSION` / `CONFIG_MTK_WIFI7_SKU_TYPE` 都是单值 → 改之前先 `CLEAN_CHIP=1` |
 | 闭环 feed | `feeds.conf.default` 用 **hash 固定**（patch 0002），比上游分支名更可复现 |
 | 原厂管理栈 | defconfig 当前启用 `wifi-profile`(原厂 `/sbin/wifi`) + `luci-app-mtk` + `datconf` + `mwctl`；如改回标准栈，需删 `patches/0008` 及上述包 |
 
@@ -96,9 +137,10 @@ scripts/fetch-vendor.sh /path/to/mtk-sdk/dl
 scripts/set-vendor-hashes.sh          # 顺便把 sha256 回填进 Makefile
 
 # 构建（默认带品牌 + 5G 选包）
-scripts/build.sh h5000m               # 或 7dr7230
-# 尽量贴近官方：      NO_BRAND=1 scripts/build.sh h5000m
-# 切芯片前：          CLEAN_CHIP=1 scripts/build.sh 7dr7230
+scripts/build.sh h5000m               # profile 可省略（只有这一个）
+# macOS / Windows：     scripts/build-docker.sh h5000m
+# 尽量贴近官方：        NO_BRAND=1 scripts/build.sh
+# 换 SKU 做 A/B：       SKU=BE3600SDB CLEAN_CHIP=1 scripts/build.sh
 # 仅本地文件不做下载：保持 PKG_SOURCE_URL 为 example.com 亦可，只要 dl/ 里有 tarball
 
 # 产物
@@ -114,10 +156,12 @@ CI：`.github/workflows/build.yml` 支持手动触发 / 每周定时 / 打 `v*` 
 ## 5. 待办 / 未验证（下次优先）
 
 - [ ] **未做完整编译**：本机没有专有 tarball，只验证了「overlay + patches 能干净贴上官方树」。**首次得到 tarball 后必须跑一次 `scripts/build.sh`** 确认能出固件。
-- [ ] 把专有 tarball 放到私有 Release，并在 GitHub 配好 secret `VL_REPO`/`VL_TOKEN`。
+- [ ] **上真机验证 Wi-Fi SKU**：默认 `BE5040`；若频段异常，用 `SKU=BE3600SDB CLEAN_CHIP=1 scripts/build.sh` 出第二包 A/B（见 §1.5）。
+- [ ] 把专有 tarball 放到私有 Release，并在 GitHub 配好 secret `VL_REPO`/`VL_TOKEN`（或设仓库 Variable `SKU` 切换 SKU）。
 - [ ] `patches/0006` 把 `MEDIATEK_NETSYS_*` 放进 `generic/config-6.12`（影响所有 target），可评估只留在 `mediatek/filogic`。
-- [ ] 进一步裁剪 `overlay`：`mt798x-2p5g-phy-firmware-internal`（已用官方固件，可删）、未用到的 DSA/PHY（`mxl862xx`/`mt753x`/`an8855`/`an8801`）、USB xhci-mtk 厂商测试码 —— 需上机确认后删。
-- [ ] 决定是否改回**标准 wifi 栈**（弃 `wifi-profile`/`luci-app-mtk`/`datconf`/`mwctl`，删 `patches/0008`）。
+- [ ] 进一步裁剪 `overlay`（**保守，等上机确认后再做**）：`mt798x-2p5g-phy-firmware-internal`、未用到的 DSA/PHY（`mxl862xx`/`mt753x`/`an8855`/`an8801`）、USB xhci-mtk 厂商测试码。
+- [ ] 评估是否改回**标准 wifi 栈**（弃 `wifi-profile`/`luci-app-mtk`/`datconf`/`mwctl`，删 `patches/0008`）。
+      ⚠️ 注意：`MIGRATION_ISSUES.md` §7 写着「已禁用 wifi-profile」，但**原仓库最终代码是启用它的**（`wifi-scripts/Makefile` 里那句 `rm -f /sbin/wifi` 就是为它让路），本仓库按**原代码**保留。§7 那段是历史记录，不可作为依据。
 - [ ] `NO_BRAND=1` 与 `common.extra` 至少各出一次固件做对比。
 - [ ] 5G 模组：上机确认 `higowrt-modem-check` 输出，按实测精简 `common.extra`。
 
@@ -128,7 +172,7 @@ CI：`.github/workflows/build.yml` 支持手动触发 / 每周定时 / 打 `v*` 
 1. `PKG_HASH:=skip` **不能用**：本地已有 tarball 时 `download.pl` 会判 hash 不匹配直接失败。所以用「真实 URL + `scripts/set-vendor-hashes.sh` 填 sha256」；本地有文件时不会触发下载。
 2. `PKG_SOURCE_URL` **非空**才会启用 OpenWrt 的下载规则；为空时「必须有 dl/ 本地文件」。
 3. `mt_wifi7` 与 `mt_hwifi` **共享** `PKG_BUILD_DIR`，hwifi 的补丁必须并进 wifi7 的 `patches/`（本仓库已如此）。
-4. SKU/CHIP 编译期单值，不能同一次 build 两个芯片。
+4. SKU/CHIP 是编译期单值，换 SKU 或芯片必须 `CLEAN_CHIP=1`（清理 `mt_wifi7`/`warp`）。
 5. 链接 `mt_wifi.ko`(≈45MB) 吃内存，建议 ≥8G（CI runner 足够）。
 6. LED：若驱动 `MTK_WIFI7_LED_CONTROL_SUPPORT` 自己点灯，`board.d/02_higowrt` 的 netdev 触发可能冲突，不确定就删该文件。
 7. 风扇：`99-higowrt-fan` 只写低速下限、**不改 `pwm1_enable`**，不影响 thermal；要停用直接删文件。

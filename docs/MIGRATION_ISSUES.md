@@ -1,5 +1,11 @@
 # ImmortalWrt-6.6 → OpenWrt 25.12 (内核 6.12) MT7987/MT7992 移植问题全记录
 
+> ⚠️ **历史档案（原仓库带入），不是本仓库的当前状态。**
+> 本仓库现在**只支持 Hiveton H5000M**（TL-7DR7230/MT7988 及 BPI-R4 相关段落已不适用）。
+> 其中两处结论与最终代码**不一致**，已在新仓库中查清，请以 `docs/HANDOFF.md` 为准：
+> - §6.1 写「h5000m SKU = BE3600SDB」，但最终 defconfig 是 `BE5040`（原厂 MT7992 参考计划数据即 5040，见 HANDOFF §1.5）。
+> - §7 写「禁用 wifi-profile」，但最终代码是**启用**它（`wifi-scripts/Makefile` 的 `rm -f /sbin/wifi` 就是为它让路）。
+>
 > 从 0 迁移过程中遇到的所有问题、根因与解决方案。
 > 目标：把 immortalwrt-hiveton-mt-6.6 的 MTK proprietary Wi-Fi 7 驱动栈移植到 OpenWrt 25.12.4（内核 6.12.87）。
 > 编译服务器：10.211.55.3（x86_64 VM），代码在 `~/openwrt-25.12`。

@@ -13,7 +13,7 @@
 |---|---|---|---|
 | `0001-brand-openwrt-to-higowrt.patch` | `include/version.mk`、`package/base-files/image-config.in`、`.../bin/config_generate`、`.../etc/banner`、`banner.failsafe` | HiGoWRT 品牌 / 默认 hostname | **可选**（`NO_BRAND=1` 可跳过） |
 | `0002-feeds-pin-commits.patch` | `feeds.conf.default` | feed 由分支名改为 **hash 固定**（更可复现） | 建议保留 |
-| `0003-filogic-add-devices.patch` | `target/linux/mediatek/image/filogic.mk` | 追加 `hiveton_h5000m`、`tplink_tl-7dr7230-*` 设备定义 | **必要** |
+| `0003-filogic-add-devices.patch` | `target/linux/mediatek/image/filogic.mk` | 追加 `hiveton_h5000m` 设备定义（原仓库还带 `tplink_tl-7dr7230-*`，本仓库**已删**） | **必要** |
 | `0004-filogic-h5000m-network.patch` | `mediatek/filogic/base-files/etc/board.d/02_network` | 追加 H5000M LAN/WAN 映射 | **必要** |
 | `0005-kernel-config-filogic.patch` | `mediatek/filogic/config-6.12` | `CONFIG_NET_MEDIATEK_HNAT=m` | **必要** |
 | `0006-kernel-config-generic.patch` | `target/linux/generic/config-6.12` | `MEDIATEK_NETSYS_V2/V3/RX_V2`、`NF_FLOW_TABLE_NETLINK` | **必要**（见备注） |
@@ -57,14 +57,14 @@
 | `files-6.12/drivers/usb/host/xhci-mtk-*` | 厂商 USB 测试/增强码 | **按需**（5G 模组走 USB 时相关） |
 | `files-6.12/drivers/net/wireless/wifi_utility/` | WiFi utility 内核侧 | 按需 |
 | `files-6.12/include/`、`include/uapi/` | `ra_nat.h`、`mtk_vendor_nl80211.h`、`wapp/*` 头 | **必要**（驱动依赖） |
-| `dts/mt7987a-hiveton-h5000m.dts`、`dts/mt7988d-tplink-tl-7dr7230-rev1.0-sp2.dts` | 板级 DTS | **必要** |
+| `dts/mt7987a-hiveton-h5000m.dts` | 板级 DTS（原仓库还有 `mt7988d-tplink-tl-7dr7230-*.dts`，本仓库**已删**） | **必要** |
 
 ### C. 其它
 
 | 路径 | 内容 | 分级 |
 |---|---|---|
 | `overlay/package/luci-theme-higowrt/`（17）| 自研主题 | 可选 |
-| `configs/mt7987_h5000m.config`、`configs/mt7988_7dr7230.config` | 预置配置 | **必要** |
+| `configs/mt7987_h5000m.config` | 预置配置（唯一 profile；原仓库的 `mt7988_mt7992.config` 属 TL-7DR7230，本仓库**已删**） | **必要** |
 | `dl/datconf-757f9679.tar.bz2` | datconf 源码包（小，已入库） | 保留 |
 
 ---
@@ -74,7 +74,7 @@
 | 需求 | 位置 |
 |---|---|
 | **MTK 驱动** | `overlay/package/mtk/drivers/{mt_wifi7,mt_hwifi,mt_wifi_osal,warp}` + `overlay/target/linux/mediatek/files-6.12/.../mtk_hnat` + `patches/0007` + `patches/0005/0006` |
-| **无线 RF** | 各 profile `configs/*.config` 里的 `MTK_WIFI7_*_IF_RF_OFFSET`、`FIRST_IF_IPAILNA`/`SECOND_IF_EPAELNA`、`SKU_TYPE`；2.5G/PHY 固件包 |
+| **无线 RF** | `configs/mt7987_h5000m.config` 里的 `MTK_WIFI7_*_IF_RF_OFFSET`、`FIRST_IF_IPAILNA`/`SECOND_IF_EPAELNA`、`SKU_TYPE`（=`BE5040`，见 README「Wi-Fi SKU」）；2.5G/PHY 固件包 |
 | **风扇** | DTS `&fan (pwm-fan)` + thermal cooling + `overlay/package/mtk/applications/luci-app-Airpifanctrl` |
 | **LED** | DTS `gpio-leds`(WiFi_2G/WiFi_5G) + `kmod-leds-gpio` + `MTK_WIFI7_LED_CONTROL_SUPPORT` |
 | **5G 模组** | 原仓库**未启用任何蜂窝栈**（仅 HNAT `ext-devices-prefix="usb","wwan","rmnet"`）。新仓库已通过 `configs/common.extra` 提供选包（`kmod-usb-net-qmi-wwan`/`cdc-mbim`/`kmod-mhi-wwan-*`、`uqmi`/`umbim`/`modemmanager`、`luci-proto-qmi|mbim|modemmanager`、`bsbf-quectel-usbnet`、`quectel-timesync`）；USB 侧 DTS `&ssusb` 已 `okay`。详见 `docs/5G-MODEM.md` |
@@ -89,10 +89,10 @@
 | `target/linux/mediatek/{dts,files-6.12,patches-6.12}`（新增） | `overlay/target/linux/mediatek/**` |
 | `package/luci-theme-higowrt/**` | `overlay/package/luci-theme-higowrt/**` |
 | 14 个被改的官方文件 | `patches/*.patch`（8 个） |
-| `defconfig/*.config` | `configs/mt7987_h5000m.config`、`configs/mt7988_7dr7230.config` |
+| `defconfig/*.config` | `configs/mt7987_h5000m.config`（H5000M，唯一保留的 profile） |
 | `_prep_build.sh` | `scripts/build.sh` |
-| `MIGRATION_ISSUES.md` | `docs/MIGRATION_ISSUES.md` |
-| `.github/workflows/build-on-comment.yml`（OpenWrt 自带，不适用于本 fork） | `.github/workflows/build.yml`（本 fork 的矩阵构建） |
+| `MIGRATION_ISSUES.md` | `docs/MIGRATION_ISSUES.md`（历史档案，注意其中 §6.1/§7 的结论与最终代码不符，见 `docs/HANDOFF.md`） |
+| `.github/workflows/build-on-comment.yml`（OpenWrt 自带，不适用于本 fork） | `.github/workflows/build.yml`（本 fork 的单 profile 构建）
 
 ## 五、新仓库新增（原仓库没有）
 

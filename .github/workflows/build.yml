@@ -2,12 +2,6 @@ name: build
 
 on:
   workflow_dispatch:
-    inputs:
-      profile:
-        description: "只构建某个 profile（留空=全部）"
-        required: false
-        type: choice
-        options: ["", "h5000m", "7dr7230"]
   push:
     tags: ["v*"]
   schedule:
@@ -16,38 +10,19 @@ on:
 permissions:
   contents: write
 
-# WARP_VERSION / CHIP 是编译期单值，不同芯片必须分开 job 构建
+# 本仓库只支持 Hiveton H5000M（MT7987A + MT7992，eMMC）。
+# 若以后要加设备：把 jobs.build 改成 strategy.matrix（matrix 变量不能在 job 级 if 里用，
+# 需要先加一个 prepare job 生成 matrix），并给每个设备一份 configs/mtXXXX_<profile>.config。
 jobs:
-  # job 级 if 拿不到 matrix 上下文，所以先用 prepare 生成 matrix
-  prepare:
-    runs-on: ubuntu-latest
-    outputs:
-      matrix: ${{ steps.m.outputs.matrix }}
-    steps:
-      - id: m
-        run: |
-          ALL='[
-            {"profile":"h5000m","config":"mt7987_h5000m","chip":"mt7987"},
-            {"profile":"7dr7230","config":"mt7988_7dr7230","chip":"mt7988"}
-          ]'
-          SEL="${{ github.event.inputs.profile }}"
-          if [ -n "$SEL" ]; then
-            M=$(echo "$ALL" | jq -c --arg p "$SEL" '[.[] | select(.profile==$p)]')
-          else
-            M=$(echo "$ALL" | jq -c .)
-          fi
-          echo "matrix={\"include\":$M}" >> "$GITHUB_OUTPUT"
-
   build:
-    needs: prepare
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
     runs-on: ubuntu-latest
     timeout-minutes: 360
 
     env:
-      PROFILE: ${{ matrix.profile }}
+      PROFILE: h5000m
+      # 可用仓库 Variable 覆盖 Wi-Fi SKU（默认取 defconfig 的 BE5040）；
+      # 实机验证时设 SKU=BE3600SDB 再手动跑一次做 A/B。
+      SKU: ${{ vars.SKU }}
 
     steps:
       - uses: actions/checkout@v4
@@ -85,14 +60,14 @@ jobs:
       - name: ccache
         uses: hendrikmuhs/ccache-action@v1.2
         with:
-          key: ${{ matrix.profile }}
+          key: ${{ env.PROFILE }}
 
       - name: 缓存 dl
         uses: actions/cache@v4
         with:
           path: build/openwrt/dl
-          key: dl-${{ matrix.profile }}-${{ hashFiles('dl/SHA256SUMS') }}
-          restore-keys: dl-${{ matrix.profile }}-
+          key: dl-${{ env.PROFILE }}-${{ hashFiles('dl/SHA256SUMS') }}
+          restore-keys: dl-${{ env.PROFILE }}-
 
       - name: 构建
         run: |
@@ -109,7 +84,7 @@ jobs:
       - name: 上传产物
         uses: actions/upload-artifact@v4
         with:
-          name: higowrt-${{ matrix.profile }}-${{ github.sha }}
+          name: higowrt-${{ env.PROFILE }}-${{ github.sha }}
           path: |
             build/openwrt/bin/targets/mediatek/filogic/*sysupgrade*
             build/openwrt/bin/targets/mediatek/filogic/*recovery*

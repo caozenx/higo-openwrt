@@ -16,6 +16,24 @@
 
 ---
 
+## 支持设备
+
+本仓库**只支持一个设备**：
+
+| 设备 | SoC | Wi-Fi | 存储 | 平台 |
+|---|---|---|---|---|
+| **Hiveton H5000M** | MT7987A | MT7992 (Kite) | eMMC | MTK filogic |
+
+对应的编译 profile 只有一个：`h5000m`（`configs/mt7987_h5000m.config` + `overlay/.../dts/mt7987a-hiveton-h5000m.dts` + `patches/0003`/`0004` 里的 `hiveton,h5000m` 设备定义）。
+
+> **关于 Wi-Fi 的「BE3600」**：这是产品的 Wi-Fi 速率档位（营销名），**不是**驱动的 SKU 名。
+> 驱动实际用的是 `CONFIG_MTK_WIFI7_SKU_TYPE="BE5040"`，依据是原厂随包提供的 MT7992 参考计划
+> `overlay/package/mtk/drivers/wifi-profile/files/mt7992-be5400/`（`l1profile.dat` → `mt7992.5040.1.dat` → 双频 `b0`+`b1`）。
+> 详见 [`docs/HANDOFF.md`](docs/HANDOFF.md) 的「Wi-Fi SKU」一节。若实机验证发现频段异常，可一行覆盖：
+> `SKU=BE3600SDB scripts/build.sh h5000m`
+
+---
+
 ## 目录
 
 | 路径 | 说明 |
@@ -26,8 +44,9 @@
 | `overlay/package/luci-theme-higowrt/` | 自研主题 |
 | `overlay/target/linux/mediatek/` | 板级 DTS、`files-6.12` 源码、`patches-6.12` 内核补丁 |
 | `patches/` | 只对**官方已有文件**做的改动（品牌 / kernel config / 设备定义 / HNAT 包 / 板级网口） |
-| `configs/` | 两个 profile 的 defconfig（H5000M / TL-7DR7230） |
+| `configs/` | 设备 defconfig（当前只有 `mt7987_h5000m.config`） |
 | `configs/common.extra` | 可选功能配置片段（当前=**5G 模组**），`build.sh` 自动追加 |
+| `configs/<profile>.extra` | 按 profile 的可选配置片段（存在才追加，当前无） |
 | `dl/` | 专有 tarball 存放/校验（大文件不入库，见 `dl/README.md`） |
 | `scripts/build.sh` | 本地/CI 一键构建（Linux） |
 | `scripts/build-docker.sh` | 在 Docker 容器里构建（macOS/Windows 可用） |
@@ -36,7 +55,7 @@
 | `docs/HANDOFF.md` | **工作交接**：已完成/待办/关键信息（下次从这里继续） |
 | `docs/MANIFEST.md` | **必要 / 按需 / 可删** 改动清单 + 与原仓库的映射 |
 | `docs/5G-MODEM.md` | 5G 模组选包说明 + 设备端验证方法 |
-| `.github/workflows/build.yml` | CI 矩阵构建 + Release |
+| `.github/workflows/build.yml` | CI 构建（单 profile）+ Release |
 
 ---
 
@@ -77,7 +96,7 @@ sudo apt update && sudo apt install -y build-essential clang flex bison g++ gawk
   python3-setuptools rsync unzip zlib1g-dev file wget qemu-utils ccache libelf-dev
 
 # 构建（首跑会 clone 上游 + 装 feeds，耗时较长）
-scripts/build.sh h5000m        # 或 7dr7230
+scripts/build.sh h5000m
 # 产物：build/openwrt/bin/targets/mediatek/filogic/
 #   *-squashfs-sysupgrade.bin   （正式刷写）
 #   *-recovery.itb              （initramfs 内存启动调试）
@@ -85,7 +104,8 @@ scripts/build.sh h5000m        # 或 7dr7230
 
 可选环境变量：`BUILD_ROOT`、`DL_DIR`、`DL_BASE_URL`、`JOBS`、
 `NO_BRAND=1`（跳过品牌补丁，得到尽量贴近官方的版本）、
-`CLEAN_CHIP=1`（切芯片前清理 `mt_wifi7`/`warp` 构建目录）。
+`SKU=<值>`（覆盖 `CONFIG_MTK_WIFI7_SKU_TYPE`，默认 `BE5040`，详见下方「Wi-Fi SKU」）、
+`CLEAN_CHIP=1`（清理 `mt_wifi7`/`warp` 构建目录）。
 
 > ⚠️ **不要用 macOS 直接跑 `scripts/build.sh`**：OpenWrt 需要区分大小写的文件系统与 Linux 工具链，macOS 默认文件系统不满足。macOS 请用方式 B。
 
@@ -95,15 +115,15 @@ scripts/build.sh h5000m        # 或 7dr7230
 
 ```bash
 # 依赖：装了 Docker Desktop 即可；dl/ 里先放好专有 tarball
-scripts/build-docker.sh h5000m        # 或 7dr7230
+scripts/build-docker.sh h5000m
 # 产物：./artifacts/h5000m/
 ```
 
-可用 `IMAGE=ubuntu:24.04`、`VOLUME=higo-openwrt-build`、`NO_BRAND=1`、`DL_BASE_URL=...` 等环境变量。
+可用 `IMAGE=ubuntu:24.04`、`VOLUME=higo-openwrt-build`、`NO_BRAND=1`、`SKU=...`、`DL_BASE_URL=...` 等环境变量。
 
 ### 4. 方式 C：GitHub Actions 流水线
 
-`.github/workflows/build.yml`：手动触发 / 每周定时 / 打 `v*` tag 自动构建，两个 profile 分矩阵 job，产物上传 Artifact，打 tag 时自动建 Release。
+`.github/workflows/build.yml`：手动触发 / 每周定时 / 打 `v*` tag 自动构建，产物上传 Artifact，打 tag 时自动建 Release。
 
 **一次性配置**（仓库 Settings → Secrets and variables → Actions）：
 
@@ -113,6 +133,26 @@ scripts/build-docker.sh h5000m        # 或 7dr7230
 | `VL_TOKEN` | 对该仓库有读权限的 PAT（用于 `gh release download`） |
 
 > 也可以不用私有 Release：改用 `DL_BASE_URL` 指向任意可下载的镜像（届时在 workflow 里传该环境变量）。
+
+---
+
+## Wi-Fi SKU（`CONFIG_MTK_WIFI7_SKU_TYPE`）
+
+`SKU_TYPE` 决定 MT7992 加载哪一组 band 固件，**与设备选择是两件独立的事**：
+`make menuconfig` 里的 `Target Profile → Hiveton H5000M` 只决定 DTS / 网口 / 设备包，
+不会自动帮你选 SKU（它是驱动包级的一个自由字符串，`default "BE19000"`）。
+
+本仓库 H5000M 用 **`BE5040`**，依据：
+
+| 证据 | 内容 |
+|---|---|
+| 原厂 MT7992 参考计划（随包分发） | `wifi-profile/files/mt7992-be5400/l1profile.dat` → `INDEX0_init_path=/etc/wireless/mediatek/mt7992.5040.1.dat` → `BN0/BN1 = mt7992.b0.dat / mt7992.b1.dat`（双频） |
+| 该数据安装条件 | `first_card_name=MT7992` 时**无条件**安装，与 `SKU_TYPE` 无关 → 原厂对 MT7992 的默认就是 5040 计划 |
+| 历史 | 原仓库最终 defconfig = `BE5040`，也是实际出过包的配置 |
+
+> ⚠️ **未在真机验证**：原移植是在 x86 虚拟机上完成的，Wi-Fi 从未在真实 H5000M 上跑过。
+> 若实机出现「频段缺失 / 起不来」，用 `SKU=BE3600SDB scripts/build.sh h5000m` 重新出一包做 A/B 对比
+> （`BE3600SDB` 是驱动里 MT7992 的另一套 band 计划，会走 4_1+5_1+6_1 拼接固件路径）。
 
 ---
 
@@ -131,7 +171,10 @@ scripts/build.sh h5000m
 ## 约束
 
 - **专有 tarball 不入库**：CI 必须能从私有镜像拿到，否则构建失败。
-- **一次 build 只出一个芯片**（`CONFIG_WARP_VERSION` / `CHIP_MT*` 编译期单值）。
+- **只支持 H5000M**（MT7987A + MT7992）：设备集是 `CONFIG_TARGET_mediatek_filogic_DEVICE_hiveton_h5000m`，
+  不再包含 TL-7DR7230 / MT7988 设备。
+- `CONFIG_WARP_CHIPSET` / `CONFIG_WARP_VERSION` / `CONFIG_MTK_WIFI7_SKU_TYPE` 都是**编译期单值**：
+  换芯片或换 SKU 前先 `CLEAN_CHIP=1`（或 `make package/mtk/drivers/mt_wifi7/clean package/mtk/drivers/warp/clean`）。
 - 链接 `mt_wifi.ko`(≈45MB) 吃内存，建议 ≥8G；CI runner 16G 足够。
 - `patches/` 与 `OPENWRT_REF` 强绑定：ref 一动就要回归。
 

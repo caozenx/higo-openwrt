@@ -5,18 +5,24 @@
 # 因此构建目录用 docker 命名卷（区分大小写），只把产物拷回宿主机。
 #
 # 用法:
-#   scripts/build-docker.sh <h5000m|7dr7230> [额外传给 build.sh 的环境变量...]
+#   scripts/build-docker.sh [h5000m] [额外传给 build.sh 的环境变量...]
+#   本仓库只支持 Hiveton H5000M，profile 可省略。
 # 例:
+#   scripts/build-docker.sh
 #   NO_BRAND=1 scripts/build-docker.sh h5000m
-#   DL_BASE_URL=https://mirror.example.com/higo scripts/build-docker.sh 7dr7230
+#   SKU=BE3600SDB scripts/build-docker.sh h5000m
+#   DL_BASE_URL=https://mirror.example.com/higo scripts/build-docker.sh
 #
 # 产物：./artifacts/<profile>/
 #
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PROFILE="${1:-}"
-[[ -n "$PROFILE" ]] || { echo "用法: $0 <h5000m|7dr7230>" >&2; exit 1; }
+PROFILE="${1:-h5000m}"
+if [[ "$PROFILE" != "h5000m" ]]; then
+  echo "用法: $0 [h5000m]   （本仓库只支持 Hiveton H5000M）" >&2
+  exit 1
+fi
 
 IMAGE="${IMAGE:-ubuntu:24.04}"
 VOLUME="${VOLUME:-higo-openwrt-build}"
@@ -31,6 +37,7 @@ docker run --rm \
   -e BUILD_ROOT=/build \
   -e DL_DIR=/work/dl \
   -e NO_BRAND="${NO_BRAND:-}" \
+  -e SKU="${SKU:-}" \
   -e DL_BASE_URL="${DL_BASE_URL:-}" \
   -e CLEAN_CHIP="${CLEAN_CHIP:-}" \
   -e JOBS="${JOBS:-}" \
