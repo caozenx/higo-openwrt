@@ -39,7 +39,7 @@
 ### 1.4 收窄为「只支持 H5000M」
 - 删除 `configs/mt7988_7dr7230.config`、`overlay/.../dts/mt7988d-tplink-tl-7dr7230-rev1.0-sp2.dts`。
 - `patches/0003` 去掉 `tplink_tl-7dr7230-rev1.0-sp2` 设备定义（已重新生成、并实测可干净贴在官方树上）。
-- `scripts/build.sh` / `build-docker.sh`：profile 只接受 `h5000m`（可省略）。
+- `scripts/build.sh` / `build-docker.sh`：profile 参数**可省略**，省略即 H5000M（传别的值会报错）。
 - CI 由「两 profile 矩阵」简化为**单个 job**（顺手修掉了原来 job 级 `if` 用 `matrix` 导致 push/schedule 不构建的 bug）。
 - README / MANIFEST / HANDOFF 同步更新。
 
@@ -49,7 +49,8 @@
 | 来源 | 说法 |
 |---|---|
 | 原仓库最终 defconfig `defconfig/mt7987_mt7992.config` | `SKU_TYPE="BE5040"`（实际出包的配置） |
-| `MIGRATION_ISSUES.md` §6.1 | 「h5000m SKU = BE3600SDB」（**与最终代码不符，仍保留为历史档案**） |
+| 原仓库提交 `af22d76` | `fix(h5000m): WiFi SKU_TYPE BE3600SDB->BE5040 对齐 imm 修复 EEPROM timeout` —— **原仓库自己踩过 `BE3600SDB` 的坑（EEPROM timeout），后来改回 `BE5040`** |
+| `MIGRATION_ISSUES.md` §6.1 | 「h5000m SKU = BE3600SDB」（**这是改动之前的历史记录**，与最终代码不符） |
 | 原仓库 README「支持设备」表 | H5000M = MT7992 **(BE3600)**（这是产品速率档位/营销名）；同页「芯片↔SKU」表又写 MT7991→BE5040（自相矛盾） |
 | 你提供的设备规格 | MT7992 (BE3600) |
 
@@ -70,7 +71,33 @@ overlay/package/mtk/drivers/wifi-profile/files/mt7992-be5400/l1profile.dat
 - `make menuconfig` 里的 `Target Profile → Hiveton H5000M` 只决定 DTS/网口/设备包，**不会**帮你选 SKU。
 
 > ⚠️ **仍未上真机验证**：原移植全程在 x86 虚拟机上，Wi-Fi 从未在真实 H5000M 上跑过（见 `MIGRATION_ISSUES.md` §9.9）。
-> 因此 `build.sh` 加了 `SKU=<值>` 覆盖开关，实机若发现频段异常，直接 `SKU=BE3600SDB scripts/build.sh h5000m` 出第二个包做 A/B。
+> 因此 `build.sh` 加了 `SKU=<值>` 覆盖开关，实机若发现频段异常，直接 `SKU=BE3600SDB CLEAN_CHIP=1 scripts/build.sh` 出第二个包做 A/B。
+
+### 1.6 与原仓库 HEAD 的一致性核对（已做）
+原仓库并非只有一个提交，实际是 `a111f44`（整棵树压一个提交导入）+ 13 个修复提交，**当前 HEAD = `25a3aef`**。
+为确认本仓库没漏掉后续修复，逐字节对比过：
+
+| 对比 | 结果 |
+|---|---|
+| `overlay/` 全部 442 个文件 vs 原仓库同名文件 | 仅 4+1 处有意差异（5 个 Makefile 加了 `PKG_SOURCE_URL`/`PKG_HASH`），其余**完全一致** |
+| 对固定上游打完 8 个补丁后的 12 个目标文件 vs 原仓库 | **逐字节一致**（含 LAN/WAN 互换 `eac85b5`） |
+| `configs/mt7987_h5000m.config` vs 原仓库 defconfig | 仅少了 2 行指向已删包的 `# ... is not set` |
+
+即后续修复**都已包含**：`b830975`(WED dts) / `c27d511`(HNAT dts) / `fca56ca`(mtketh 属性) /
+`af22d76`(SKU→BE5040) / `d01a9b9`(5040 iPA 校准装到 `/lib/firmware/e2p`) /
+`a61ff78`(启用原厂 WiFi 用户态栈) / `eac85b5`(LAN/WAN 互换) /
+`25a3aef`(LuCI split nil 防护 + 默认纯 WPA2 + 开机自动 `wifi up`)。
+
+### 1.7 文档与配置清晰化
+只支持一个设备后，把文档里多余的「选设备」表述清掉，并补齐缺失信息：
+- 所有文档里的 `scripts/build.sh h5000m` → `scripts/build.sh`（参数可省略，只说明一次）。
+- README 新增「**刷机（H5000M，eMMC）**」章节（U-Boot Web 恢复 / 串口 + `-recovery.itb` 内存启动验证）。
+- README「支持设备」改为**表格列出各用途对应的具体文件**（defconfig / DTS / 0003 / 0004 / LED / 风扇）。
+- README 说明 `configs/mt7987_h5000m.config` 是 `make menuconfig` 的**完整快照**（7700 行），琐碎但可复现、不建议手改。
+- 修正 `docs/5G-MODEM.md` 里「默认不含蜂窝功能」与「`common.extra` 自动追加」的**自相矛盾**表述。
+- 修正 `dl/README.md`：区分「3 个需自备」与「1 个已入库的 datconf」，校验改为指向 `scripts/set-vendor-hashes.sh`。
+- 清掉 defconfig 里 2 行指向**已删除包**的 `# CONFIG_PACKAGE_{luci-app-wrtbwmon,wrtbwmon} is not set`。
+- `MANIFEST.md` 的数量改为裁减后实测值（overlay 442 = mtk 276 + target/linux 149 + 主题 17）。
 
 ---
 
@@ -136,9 +163,9 @@ cd ~/Workspace/higo-openwrt
 scripts/fetch-vendor.sh /path/to/mtk-sdk/dl
 scripts/set-vendor-hashes.sh          # 顺便把 sha256 回填进 Makefile
 
-# 构建（默认带品牌 + 5G 选包）
-scripts/build.sh h5000m               # profile 可省略（只有这一个）
-# macOS / Windows：     scripts/build-docker.sh h5000m
+# 构建（默认带品牌 + 5G 选包）；参数 h5000m 可省略
+scripts/build.sh
+# macOS / Windows：     scripts/build-docker.sh
 # 尽量贴近官方：        NO_BRAND=1 scripts/build.sh
 # 换 SKU 做 A/B：       SKU=BE3600SDB CLEAN_CHIP=1 scripts/build.sh
 # 仅本地文件不做下载：保持 PKG_SOURCE_URL 为 example.com 亦可，只要 dl/ 里有 tarball

@@ -5,7 +5,7 @@
 #   官方 OpenWrt 源码树(固定 OPENWRT_REF)
 #     + overlay/          新增文件（含 MTK 专有驱动、patch、DTS…）
 #     + patches/*.patch   对官方文件的少量“追加式”改动
-#     + configs/*.config  各设备 defconfig
+#     + configs/*.config  设备 defconfig（本仓库只有一个设备）
 #     + dl/               需自备的专有 tarball（见 dl/README.md）
 #   -> bin/targets/mediatek/filogic/*
 #

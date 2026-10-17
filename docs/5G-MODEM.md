@@ -1,7 +1,11 @@
 # 5G / 4G 蜂窝模组支持
 
-本仓库默认**不含**蜂窝功能；通过 `configs/common.extra` 这个配置片段按需加入，
-`scripts/build.sh` 会在写 `.config` 后自动追加它（后出现者覆盖前面的 `is not set`）。
+蜂窝支持通过 `configs/common.extra` 这个**配置片段**提供，`scripts/build.sh` 会在写 `.config` 之后
+**自动追加**它（后出现的选择覆盖前面的 `is not set`），所以：
+
+- **默认构建就会带上**这套 5G 选包（不需要任何额外开关）；
+- 不想要，就把 `configs/common.extra` 里的对应行删掉（或整个文件清空 / 删文件，`build.sh` 会跳过）；
+- 也可以加一个 `configs/h5000m.extra` 放你自己的覆盖项（第二个自动追加的片段）。
 
 ## 一、涉及的文件
 
@@ -9,7 +13,7 @@
 |---|---|
 | `configs/common.extra` | 选包（USB 数据通道 + 管理协议 + LuCI 界面 + 模组小工具） |
 | `overlay/target/linux/mediatek/filogic/base-files/usr/bin/higowrt-modem-check` | 设备端自检脚本（诊断 USB/串口/QMI/MBIM） |
-| `patches/0003/0004`、板级 DTS | USB 侧 `&ssusb` 已 `okay`；HNAT `ext-devices-prefix` 已含 `usb/wwan/rmnet`，无需改 |
+| `overlay/target/linux/mediatek/dts/mt7987a-hiveton-h5000m.dts` | USB 侧 `&ssusb` 已 `okay`（第 228 行）；HNAT 的 `ext-devices-prefix` 已含 `usb`/`wwan`/`rmnet`（第 278 行），一般无需再改 |
 
 ## 二、选包说明（configs/common.extra）
 

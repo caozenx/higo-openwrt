@@ -1,9 +1,19 @@
 # 改动清单（原 higowrt 相对官方 OpenWrt 的增量）
 
 基准：官方 OpenWrt `4ccb782af7`（`r32933-4ccb782af7`，25.12，内核 6.12）。
-统计：全树 **503 文件不同 = 488 新增 / 14 修改 / 1 删除**。
+统计（**原 higowrt** 相对官方）：全树 **503 文件不同 = 488 新增 / 14 修改 / 1 删除**。
+原仓库自身历史：`a111f44`（把整棵 OpenWrt 树 + 移植**压成一个提交**导入）+ 其后 13 个修复提交，
+当前 HEAD = `25a3aef`。所以原仓库**没有上游父提交**，无法 rebase —— 这正是要做增量仓库的原因。
 
 本清单用于：**保留必要、裁掉非必要**，并说明每块内容在新仓库中的位置。
+
+> **一致性状态（已核对）**：本仓库的 `overlay/` 与 8 个 `patches/` 已逐字节对比原仓库
+> `higowrt@25a3aef`（含其后所有修复：LAN/WAN 互换、5040 iPA 校准、原厂 WiFi 用户态栈、
+> LuCI nil 防护 / 默认纯 WPA2 / 开机自动 `wifi up`），**除以下有意为之的差异外完全一致**：
+> 5 个 Makefile 加了 `PKG_SOURCE_URL`/`PKG_HASH`；删掉 TL-7DR7230 与 3 个第三方 LuCI 包；
+> 新增 3 个板级脚本（LED/风扇/5G 自检）。
+>
+> 因此**下表的「共 N 个」是裁减后的新仓库实际数量**（不是原仓库的 481）。
 
 ---
 
@@ -26,9 +36,9 @@
 
 ---
 
-## 二、新增文件（已放到 `overlay/`，共 481）
+## 二、新增文件（已放到 `overlay/`，裁减后共 442）
 
-### A. `overlay/package/mtk/`（317）—— 分类见下
+### A. `overlay/package/mtk/`（276）—— 分类见下
 
 | 路径 | 内容 | 分级 |
 |---|---|---|
@@ -36,7 +46,7 @@
 | `drivers/mt_hwifi/` | HW 抽象 / PCI / WED + 3 patch | **必要** |
 | `drivers/mt_wifi_osal/` | OSAL 抽象层 + 5 patch | **必要** |
 | `drivers/warp/` | WED 硬件加速 `mtk_warp.ko` + 3 patch | **必要** |
-| `drivers/wifi-profile/` | 原厂 `/sbin/wifi`(wifi_jedi) + 119 个 dat | **按需**（用原厂管理栈才要；标准栈可删） |
+| `drivers/wifi-profile/` | 原厂 `/sbin/wifi`(wifi_jedi) + 119 个文件（含 100 个 `.dat` band 计划） | **按需**（用原厂管理栈才要；标准栈可删） |
 | `applications/luci-app-mtk`、`datconf`、`datconf-lua`、`mwctl`、`kvcedit/libkvcutil` | 原厂用户态管理/`dat` 工具 | **按需**（同上） |
 | `applications/switch`、`mii_mgr`、`regs`、`mtkhqos_util`、`mtk-smp` | 原厂底层工具 | 按需 |
 | `applications/mt798x-2p5g-phy-firmware-internal` | 2.5G PHY 内置固件 | **建议删**（defconfig 用官方 `mt7987-2p5g-phy-firmware`） |
@@ -44,7 +54,7 @@
 | `applications/luci-app-eqos-mtk`、`luci-app-turboacc-mtk` | QoS / 硬件加速 UI | 按需 |
 | `applications/luci-app-mwan3helper-chinaroute`、`wrtbwmon`、`luci-app-wrtbwmon` | 第三方分流/流量统计 | **已删**（无人依赖、defconfig 未启用） |
 
-### B. `overlay/target/linux/mediatek/`（147）
+### B. `overlay/target/linux/mediatek/`（149）
 
 | 路径 | 内容 | 分级 |
 |---|---|---|
@@ -88,7 +98,7 @@
 | `package/mtk/**`（新增） | `overlay/package/mtk/**`（已裁掉 `luci-app-mwan3helper-chinaroute`、`luci-app-wrtbwmon`、`wrtbwmon`） |
 | `target/linux/mediatek/{dts,files-6.12,patches-6.12}`（新增） | `overlay/target/linux/mediatek/**` |
 | `package/luci-theme-higowrt/**` | `overlay/package/luci-theme-higowrt/**` |
-| 14 个被改的官方文件 | `patches/*.patch`（8 个） |
+| 14 个被改的官方文件 | `patches/*.patch`（8 个）——已核对：对固定上游打完补丁的结果与原仓库 `25a3aef` **逐字节一致** |
 | `defconfig/*.config` | `configs/mt7987_h5000m.config`（H5000M，唯一保留的 profile） |
 | `_prep_build.sh` | `scripts/build.sh` |
 | `MIGRATION_ISSUES.md` | `docs/MIGRATION_ISSUES.md`（历史档案，注意其中 §6.1/§7 的结论与最终代码不符，见 `docs/HANDOFF.md`） |
@@ -103,4 +113,4 @@
 | `overlay/target/linux/mediatek/filogic/base-files/etc/board.d/02_higowrt` | WiFi 2G/5G LED 默认 |
 | `overlay/target/linux/mediatek/filogic/base-files/etc/uci-defaults/99-higowrt-fan` | 风扇默认（低速下限） |
 | `overlay/target/linux/mediatek/filogic/base-files/usr/bin/higowrt-modem-check` | 5G 模组自检 |
-| `docs/5G-MODEM.md`、`docs/HANDOFF.md` | 5G 说明 / 工作交接 |
+| `docs/5G-MODEM.md`、`docs/HANDOFF.md`、`docs/MANIFEST.md` | 5G 说明 / 工作交接 / 本清单 |

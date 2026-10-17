@@ -6,14 +6,14 @@
 #
 # 用法:
 #   scripts/build-docker.sh [h5000m] [额外传给 build.sh 的环境变量...]
-#   本仓库只支持 Hiveton H5000M，profile 可省略。
+#   本仓库只支持 Hiveton H5000M，参数可省略。
 # 例:
 #   scripts/build-docker.sh
-#   NO_BRAND=1 scripts/build-docker.sh h5000m
-#   SKU=BE3600SDB scripts/build-docker.sh h5000m
+#   NO_BRAND=1 scripts/build-docker.sh
+#   SKU=BE3600SDB scripts/build-docker.sh
 #   DL_BASE_URL=https://mirror.example.com/higo scripts/build-docker.sh
 #
-# 产物：./artifacts/<profile>/
+# 产物：./artifacts/h5000m/
 #
 set -euo pipefail
 
