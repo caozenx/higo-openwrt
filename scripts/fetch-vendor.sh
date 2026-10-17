@@ -29,5 +29,9 @@ for f in "${FILES[@]}"; do
   fi
 done
 
-( cd dl && shasum -a 256 *.tar.* > SHA256SUMS )
+if command -v sha256sum >/dev/null 2>&1; then
+  ( cd dl && sha256sum *.tar.* > SHA256SUMS )
+else
+  ( cd dl && shasum -a 256 *.tar.* > SHA256SUMS )
+fi
 echo "==> dl/SHA256SUMS"; cat dl/SHA256SUMS

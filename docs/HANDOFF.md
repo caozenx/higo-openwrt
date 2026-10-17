@@ -101,7 +101,61 @@ overlay/package/mtk/drivers/wifi-profile/files/mt7992-be5400/l1profile.dat
 - 新增 **`AGENTS.md`**：给 AI 助手/维护者的规则书（overlay 铁律 / 改动该放哪 / 验证清单 /
   已查清的关键事实 / 提交规范 / 环境坑），并在 README 目录表登记。
 
+### 1.8 构建环境核查 + 静态验证 + 编译前修复（未编译）
+
+> 目标本来是「装 MTK tarball → 真机编译验证」。**MTK 专有 tarball 暂时拿不到，编译验证顺延**，
+> 但把「编译需要什么环境/工具」全部查清并修掉了 6 个编译前就该修的问题。
+
+**构建环境（本机 macOS 27 / Apple Silicon）**
+
+| 项 | 结论 |
+|---|---|
+| Docker Desktop 4.6.1（2022） | ❌ 太老，在 macOS 27 上后端根本起不来（`docker info` 直接 panic） |
+| **Colima 0.10.3 + docker CLI 29.9.1** | ✅ 已安装（`brew install colima docker`），用它跑 `scripts/build-docker.sh` |
+| 大小写敏感 FS | macOS 不满足 → 必须在 VM 卷里编译；`build-docker.sh` 用 docker 命名卷，设计正确 |
+| 资源 | 8 核 / 16 GB / 140 GB 可用，够用（Colima 给 6 核 12 G） |
+| `gh` CLI | 未安装（只有用 CI / 私有 Release 时才需要） |
+
+**脚本里查出并修掉的问题**
+
+1. 🔴 `scripts/build-docker.sh`：apt 装了 `gcc-multilib g++-multilib`，**arm64 上不存在** →
+   容器里 apt 直接失败。已改为按 `dpkg --print-architecture` 条件安装。
+2. 🟡 `scripts/build.sh`：tarball 校验用 `shasum -a 256`，但**这步在容器里跑**，
+   Ubuntu 基础镜像不一定有 `shasum`（属 `perl` 包）→ 已改为优先 `sha256sum`，回退 `shasum`。
+   `scripts/fetch-vendor.sh` 同样处理。
+3. 🟡 apt 列表漏了 **`patch`**（`build.sh` 的补丁回退分支要用）→ 已补。
+4. ⚪ 官方旧文档里的 `python3-distutils` 在 24.04 已删除，**不能加**（本仓库脚本里本来就没有）。
+
+**配置侧修复（编译前就该修）**
+
+5. 🔴 **补 `/usr/bin/lua`**：`/sbin/wifi` = `wifi_jedi`，是 `#!/usr/bin/env lua` 脚本，
+   而 `/etc/init.d/boot:58` 会无条件执行 `/sbin/wifi config`；原 defconfig 里
+   `CONFIG_PACKAGE_lua` 是关的（`datconf-lua` 只依赖 `liblua`，`liblua` 只装 `.so`；
+   LuCI 25.12 是 ucode-only 已不再带 lua）→ **开机 wifi 配置必然失败**。
+   已置 `CONFIG_PACKAGE_lua=y`（约 70 KB）。
+6. 🧹 **defconfig 归位**：文件 7671–7680 是手工追加的 10 行，与正文里早先的
+   `# CONFIG_PACKAGE_xxx is not set` **自相矛盾**（kconfig 后者覆盖前者，所以实际是开的）。
+   已把这 10 个开关合并进正文对应位置、删掉尾部 10 行 → 现在**同一符号只出现一次**。
+7. 🧹 **删 `knot-resolver` 残留**：`CONFIG_PACKAGE_knot-resolver_dnstap=y` 会带进
+   一个完整的递归 DNS 解析器（knot-resolver + knot-libs + luajit + libgnutls + libstdcpp
+   + libuv1 + lmdb + libnghttp2 + libprotobuf-c + libfstrm + luasocket，约 5 MB），
+   没人用它。已显式关掉。
+8. 🧹 **`configs/common.extra` 里 `bsbf-quectel-usbnet` 是个不存在的包名**
+   （主树 / 24.10 feed 索引都查不到）→ 写不存在的符号会被 `make defconfig` **静默丢弃**，
+   已删除；`quectel-timesync` 确认存在于 feed，保留。
+
+**静态验证结论（不用编译也能查）**
+
+- defconfig + `common.extra` 里 181 个包名逐个核对：**没有拼写错导致构建失败的**。
+  `mt7987-2p5g-phy-firmware` 真有（`package/firmware/linux-firmware/mediatek.mk:100`）；
+  `kmod-mt_wifi_osal` 由 `KernelPackage/$(PKG_NAME)` 宏生成，存在。
+- `CONFIG_PACKAGE_TAR_*` 6 个符号看着可疑，实际是 feed 里 `tar` 包的 `config` 子项
+  （`default y`、不依赖父包），属正常，不是残留。
+- `trusted-firmware-a-mt7981-*` 等 7 个其它 SoC 的 TF-A **只进 `BIN_DIR`/staging、
+  不进 rootfs**，只影响构建时间（可作后续精简项，但未验证过，暂不动）。
+
 ---
+
 
 ## 2. 仓库结构 `~/Workspace/higo-openwrt`
 
@@ -184,7 +238,14 @@ CI：`.github/workflows/build.yml` 支持手动触发 / 每周定时 / 打 `v*` 
 
 ## 5. 待办 / 未验证（下次优先）
 
-- [ ] **未做完整编译**：本机没有专有 tarball，只验证了「overlay + patches 能干净贴上官方树」。**首次得到 tarball 后必须跑一次 `scripts/build.sh`** 确认能出固件。
+- [ ] **未做完整编译**：只验证了「overlay + patches 能干净贴上官方树」+ 静态核对（见 §1.8）。
+      编译环境已就绪（Colima，见 §1.8），但 **3 个 MTK 专有 tarball 暂时拿不到**（本机没有、
+      MTK 官方 feed 需授权、公开镜像 `mediatek/mtk-openwrt-feeds` 不含 wifi7/osal/warp 驱动源码）。
+      **拿到 tarball 后第一件事就是跑一次 `scripts/build.sh`**。
+- [ ] 待 tarball 到位前可先做的**半量验证**：临时把 4 个 vendor 驱动包
+      （`kmod-mt_wifi7` / `kmod-mt_hwifi` / `kmod-mt_wifi_osal` / `kmod-warp`）关掉后跑全量构建 →
+      能验证 toolchain / 内核 / DTS / 全部补丁 / feeds / 5G 选包 / LuCI，并拿到**真实 rootfs 包清单与体积**；
+      真正编译不了的只剩那 4 个驱动包。
 - [ ] **上真机验证 Wi-Fi SKU**：默认 `BE5040`；若频段异常，用 `SKU=BE3600SDB CLEAN_CHIP=1 scripts/build.sh` 出第二包 A/B（见 §1.5）。
 - [ ] 把专有 tarball 放到私有 Release，并在 GitHub 配好 secret `VL_REPO`/`VL_TOKEN`（或设仓库 Variable `SKU` 切换 SKU）。
 - [ ] `patches/0006` 把 `MEDIATEK_NETSYS_*` 放进 `generic/config-6.12`（影响所有 target），可评估只留在 `mediatek/filogic`。

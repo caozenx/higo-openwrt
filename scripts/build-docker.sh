@@ -4,6 +4,12 @@
 # OpenWrt 要求区分大小写的文件系统 + Linux 工具链，macOS 默认文件系统不满足，
 # 因此构建目录用 docker 命名卷（区分大小写），只把产物拷回宿主机。
 #
+# 运行时（macOS）：
+#   colima start --cpu 6 --memory 12 --disk 60   # arm64 原生 VM，够用
+#   （Docker Desktop 需为较新版本；2022 年的 4.6.x 在 macOS 15+ 上后端起不来）
+#   本机为 Apple Silicon 时用它自带的 aarch64 容器即可，无需 x86 模拟：
+#   gcc-multilib/g++-multilib 只对 x86 target 有意义，脚本已按架构条件安装。
+#
 # 用法:
 #   scripts/build-docker.sh [h5000m] [额外传给 build.sh 的环境变量...]
 #   本仓库只支持 Hiveton H5000M，参数可省略。
@@ -45,10 +51,14 @@ docker run --rm \
   "$IMAGE" bash -lc '
     set -euo pipefail
     apt-get update -qq
+    # gcc-multilib / g++-multilib 只存在于 amd64（用于 x86 target 的编译）；
+    # 在 arm64 上这两个包不存在，无条件安装会让 apt 直接失败。
+    extra=""
+    [ "$(dpkg --print-architecture)" = "amd64" ] && extra="gcc-multilib g++-multilib"
     apt-get install -y -qq \
-      build-essential clang flex bison g++ gawk gcc-multilib g++-multilib \
+      build-essential clang flex bison g++ gawk \
       gettext git libncurses-dev libssl-dev python3-setuptools rsync unzip \
-      zlib1g-dev file wget qemu-utils ccache libelf-dev sudo
+      zlib1g-dev file wget qemu-utils ccache libelf-dev patch sudo $extra
     scripts/build.sh "$PROFILE"
   '
 

@@ -128,10 +128,18 @@ scripts/build.sh
 构建目录用 docker **命名卷**（区分大小写），只把产物拷回宿主机：
 
 ```bash
-# 依赖：装了 Docker Desktop 即可；dl/ 里先放好专有 tarball
+# 依赖：一个能用的容器运行时 + dl/ 里先放好专有 tarball
+# macOS（Intel/Apple Silicon 均可）用 Colima，一条命令搞定：
+brew install colima docker
+colima start --cpu 6 --memory 12 --disk 60
+# 然后：
 scripts/build-docker.sh
 # 产物：./artifacts/h5000m/
 ```
+
+> ⚠️ 别用 2022 年版的 Docker Desktop（4.6.x）：在 macOS 15+ 上后端起不来（`docker info` 直接 panic）。
+> Apple Silicon 用 Colima 自带的 aarch64 容器即可，无需 x86 模拟；
+> `gcc-multilib`/`g++-multilib` 只对 x86 target 有意义，脚本会按架构自动决定装不装。
 
 可用 `IMAGE=ubuntu:24.04`、`VOLUME=higo-openwrt-build`、`NO_BRAND=1`、`SKU=...`、`DL_BASE_URL=...` 等环境变量。
 
@@ -221,6 +229,12 @@ scripts/build.sh
 - ✅ 已裁剪未使用的第三方 LuCI（`mwan3helper` / `wrtbwmon`）。
 - ✅ 已为 5 个包补 `PKG_SOURCE_URL` + `PKG_HASH`（含 `scripts/set-vendor-hashes.sh`）。
 - ✅ 已加 5G 模组选包（`common.extra` + `docs/5G-MODEM.md` + 自检脚本）与 风扇/LED 默认脚本。
-- ⏳ **尚未做完整编译**（本机缺专有 tarball）。拿到 tarball 后请先跑一次 `scripts/build.sh`。
+- ✅ 已把编译环境与工具链查清（macOS 用 Colima）并修掉编译前的 6 个问题：
+  `CONFIG_PACKAGE_lua=y`（`/sbin/wifi` 是 Lua 脚本，缺它会开机静默失败）、defconfig 手工尾巴合并归位、
+  删 `knot-resolver` 残留（约 5 MB）、删不存在的包名 `bsbf-quectel-usbnet`、
+  `build-docker.sh` 在 arm64 装 `gcc-multilib` 必失败、容器里 `shasum` 不可靠。
+  详见 `docs/HANDOFF.md` §1.8。
+- ⏳ **尚未做完整编译**：3 个 MTK 专有 tarball 暂时拿不到（公开渠道没有，只能自备）。
+  拿到后请先跑一次 `scripts/build.sh`。
 
 下次继续请先读 **`docs/HANDOFF.md`**。改动分级与裁剪建议见 `docs/MANIFEST.md`。

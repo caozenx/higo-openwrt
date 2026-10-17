@@ -39,7 +39,10 @@ CONFIG_PACKAGE_luci-proto-mbim=y
 CONFIG_PACKAGE_luci-proto-modemmanager=y
 
 # ---- 模组专用小工具（feed: packages）----
-# Quectel 通过 USB 网卡模式联网（部分模组需要）
-CONFIG_PACKAGE_bsbf-quectel-usbnet=y
-# Quectel GNSS/时间同步
+# Quectel GNSS/时间同步（feed 里确有此包）
 CONFIG_PACKAGE_quectel-timesync=y
+#
+# 注意：这里只写 **确实存在于 pinned feeds** 的包名。
+# 写不存在的符号不会报错，但会被 make defconfig 静默丢弃（功能悄悄缺失），
+# 所以新增前请先确认包名，例如：grep -r "^define Package/<名字>" 主树 package/
+# 或查 feed 索引。

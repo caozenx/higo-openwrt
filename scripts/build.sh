@@ -99,7 +99,14 @@ for f in mt7993_20250919-39602c.tar.xz warp_20250919-9c1cfa.tar.xz mt_wifi_osal-
   fi
 done
 if [[ -f "$DL_DIR/SHA256SUMS" ]]; then
-  ( cd "$O/dl" && grep -E "mt7993_|warp_|mt_wifi_osal-|datconf-" "$DL_DIR/SHA256SUMS" | shasum -a 256 -c - || {
+  # 兼容 Linux(sha256sum) / macOS(shasum)。注意本步骤在容器里执行，
+  # 而 Ubuntu 基础镜像不一定带 shasum（属 perl 包），所以优先 sha256sum。
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256cmd=(sha256sum)
+  else
+    sha256cmd=(shasum -a 256)
+  fi
+  ( cd "$O/dl" && grep -E "mt7993_|warp_|mt_wifi_osal-|datconf-" "$DL_DIR/SHA256SUMS" | "${sha256cmd[@]}" -c - || {
       echo "tarball 校验失败" >&2; exit 1; } )
 fi
 

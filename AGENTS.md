@@ -110,6 +110,11 @@ for p in $(ls "$R"/patches/*.patch | sort -r); do git -C "$T" apply -R "$p"; don
 git -C "$T" status --porcelain   # 应为空
 
 # 5) 改了 overlay/patches 时的强验证：与原仓库逐字节对比（见 §6）
+
+# 6) 改了 configs/*.config 时：同一符号只能出现一次（defconfig 是快照，但符号不能重复）
+grep -oE '^#? ?CONFIG_[A-Za-z0-9_-]+' configs/mt7987_h5000m.config \
+  | sed 's/^# //' | sort | uniq -d
+# 输出应为空（`lua5.3`/`golang1.26` 这类带点版本号会被上面的正则误截，注意肉眼排除）
 ```
 
 > 改了 `overlay/` 或 `patches/` 之后，**必须**跑 3) 和 4)；改了脚本跑 1)；改了 CI 跑 2)。
@@ -168,6 +173,24 @@ done
 - **`PKG_SOURCE_URL` 必须非空**，否则 OpenWrt 的下载规则不生效；不要用 `PKG_HASH:=skip`。
 - **`wifi-profile` 是启用的**（原厂 `wifi_jedi` 顶掉官方 `/sbin/wifi`，见 `patches/0008`）。
   `docs/MIGRATION_ISSUES.md` §6.1、§7 的相反结论是**改动前的历史档案**，不要照它改。
+- **`/sbin/wifi` 是 Lua 脚本，所以 `CONFIG_PACKAGE_lua=y` 是硬需求**（别把它关掉）。
+  依据：`overlay/package/mtk/drivers/wifi-profile/files/common/wifi_jedi` 首行是
+  `#!/usr/bin/env lua`；`/etc/init.d/boot` 会无条件执行 `/sbin/wifi config`。
+  ⚠️ `datconf-lua` 只依赖 `liblua`，而 `liblua` 只装 `/usr/lib/liblua.so*` ——
+  **`/usr/bin/lua` 只由 `lua` 包提供**；LuCI 25.12 是 ucode-only，已不再带 lua。
+  关掉 `lua` 的后果是开机 wifi 配置静默失败（build 不会报错）。
+- **defconfig 是 `make menuconfig` 的完整快照，同一符号只能出现一次**。
+  历史上尾部手工追加过 10 行（与正文早先的 `is not set` 冲突），已合并进正文。
+  加新包请改对应位置那一行，**不要在文件尾部追加**。
+- **写进配置的包名必须真实存在**（主树 / pinned feeds 里查得到）。不存在的符号
+  `make defconfig` 会**静默丢弃**，不报错 —— 表现是「功能莫名缺失」。
+  典型事故：`common.extra` 里的 `bsbf-quectel-usbnet` 就是个不存在的包名（已删）。
+  校验方法：`grep -rhoE '^define (Kernel)?Package/[^ ]+' package/ target/` 对比配置里的
+  `CONFIG_PACKAGE_*`。
+- **`CONFIG_PACKAGE_knot-resolver_dnstap` 是残留，已关**：它是 `knot-resolver` 的一个
+  `config` 子项（feed `net/knot-resolver/Makefile` 里确有），打开会拉进
+  约 5 MB 的递归 DNS 解析器（+ knot-libs/luajit/libgnutls/libstdcpp/libuv1/lmdb/
+  libnghttp2/libprotobuf-c/libfstrm/luasocket），本设备用不到。
 
 ---
 
@@ -190,7 +213,19 @@ fix(h5000m): 互换 LAN/WAN — eth0(RTL8221)=WAN, eth1(内置2.5G)+hnat=LAN
 ## 9. 环境限制（踩过）
 
 - **macOS 不能原生编译 OpenWrt**（需要大小写敏感文件系统 + Linux 工具链）→ 用 `scripts/build-docker.sh`。
+- **本机（Apple Silicon / macOS 27）的容器运行时**：Docker Desktop 4.6.1（2022）已无法启动后端
+  （`docker info` 直接 panic），改用 **Colima**：
+  ```bash
+  brew install colima docker
+  colima start --cpu 6 --memory 12 --disk 60
+  ```
+  用 Colima 自带的 aarch64 容器即可（目标本身也是 aarch64，无需 x86 模拟）。
+- ⚠️ **`gcc-multilib`/`g++-multilib` 在 arm64 上不存在**：`build-docker.sh` 已按
+  `dpkg --print-architecture` 条件安装，别改回无条件安装（会让容器里 apt 直接失败）。
+- ⚠️ 容器里没有 `shasum` 的可能性（属 `perl` 包）→ 脚本里校验一律**优先 `sha256sum`**，回退 `shasum`。
 - 链接 `mt_wifi.ko`（≈45 MB）吃内存，建议 ≥8 G；不足时 `JOBS=2`。
 - 本机**没有**那 3 个专有 tarball，所以「完整编译」尚未跑过；Wi-Fi 也**从未在真机上验证**过
   （原移植在 x86 VM 上完成）。首刷建议先用 `*-recovery.itb` 内存启动确认，再写 eMMC。
+- 那 3 个 tarball **无法从公开渠道获取**（MTK 授权 SDK；公开镜像 `mediatek/mtk-openwrt-feeds`
+  里没有 wifi7/osal/warp 驱动源码）→ 只能由本人提供。
 - CI 需要配置 secret `VL_REPO` / `VL_TOKEN`（私有 Release 镜像）或 `DL_BASE_URL`，否则拿不到 tarball 必然失败。
