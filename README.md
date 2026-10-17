@@ -63,6 +63,7 @@
 | `scripts/fetch-vendor.sh` | 收集 MTK SDK tarball + 生成校验和 |
 | `scripts/set-vendor-hashes.sh` | 计算并回填 `PKG_HASH`（让 OpenWrt 下载机制可用） |
 | `docs/HANDOFF.md` | **工作交接**：已完成/待办/关键信息（**下次从这里继续**） |
+| `AGENTS.md` | **给 AI 助手/维护者的仓库规则**：铁律、改动该放哪、验证清单、易踩的坑 |
 | `docs/MANIFEST.md` | **必要 / 按需 / 可删** 改动清单 + 与原仓库的映射 |
 | `docs/5G-MODEM.md` | 5G 模组选包说明 + 设备端验证方法 |
 | `docs/MIGRATION_ISSUES.md` | 原仓库带入的**历史档案**（多设备时期的移植问题记录；部分结论已过时，见文首提示） |

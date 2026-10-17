@@ -98,6 +98,8 @@ overlay/package/mtk/drivers/wifi-profile/files/mt7992-be5400/l1profile.dat
 - 修正 `dl/README.md`：区分「3 个需自备」与「1 个已入库的 datconf」，校验改为指向 `scripts/set-vendor-hashes.sh`。
 - 清掉 defconfig 里 2 行指向**已删除包**的 `# CONFIG_PACKAGE_{luci-app-wrtbwmon,wrtbwmon} is not set`。
 - `MANIFEST.md` 的数量改为裁减后实测值（overlay 442 = mtk 276 + target/linux 149 + 主题 17）。
+- 新增 **`AGENTS.md`**：给 AI 助手/维护者的规则书（overlay 铁律 / 改动该放哪 / 验证清单 /
+  已查清的关键事实 / 提交规范 / 环境坑），并在 README 目录表登记。
 
 ---
 
