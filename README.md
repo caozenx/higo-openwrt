@@ -60,8 +60,9 @@
 | `dl/` | 专有 tarball 存放/校验（大文件不入库，见 `dl/README.md`） |
 | `scripts/build.sh` | 本地/CI 一键构建（Linux） |
 | `scripts/build-docker.sh` | 在 Docker 容器里构建（macOS/Windows 可用） |
-| `scripts/fetch-vendor.sh` | 收集 MTK SDK tarball + 生成校验和 |
+| `scripts/fetch-vendor.sh` | 收集/下载/解压归档 MTK SDK tarball → `dl/`，并生成 `SHA256SUMS` |
 | `scripts/set-vendor-hashes.sh` | 计算并回填 `PKG_HASH`（让 OpenWrt 下载机制可用） |
+| `scripts/selftest-fetch-vendor.sh` | 上面两个脚本的自测（临时副本里跑，含真数据校验） |
 | `docs/HANDOFF.md` | **工作交接**：已完成/待办/关键信息（**下次从这里继续**） |
 | `AGENTS.md` | **给 AI 助手/维护者的仓库规则**：铁律、改动该放哪、验证清单、易踩的坑 |
 | `docs/MANIFEST.md` | **必要 / 按需 / 可删** 改动清单 + 与原仓库的映射 |
@@ -85,15 +86,32 @@
 
 ### 1. 准备专有 tarball（必做）
 
-MTK Wi-Fi7 闭源 SDK 的三个 tarball（**不随仓库分发**，缺一不可），放到 `dl/`：
+MTK Wi-Fi7 闭源 SDK 的三个 tarball（**不随仓库分发**，缺一不可），放到 `dl/`。
+用 `scripts/fetch-vendor.sh` 一个脚本搞定，来源任选：
 
 ```bash
-cp /path/to/mt7993_20250919-39602c.tar.xz   dl/   # mt_wifi7 / mt_hwifi 共用
-cp /path/to/warp_20250919-9c1cfa.tar.xz     dl/   # warp
-cp /path/to/mt_wifi_osal-a53418.tar.xz      dl/   # mt_wifi_osal
-# 可选：顺便算哈希写回 Makefile（让 CI 的下载校验生效）
-scripts/set-vendor-hashes.sh
+# ① 已有 SDK 目录
+scripts/fetch-vendor.sh /path/to/mtk-wifi-sdk/dl
+
+# ② 逐文件下载
+scripts/fetch-vendor.sh --base-url https://mirror.example.com/higo
+
+# ③ 一个「大归档」里装着这几个 tarball → 自动解压 + 挑出文件
+scripts/fetch-vendor.sh --archive vendor-sdk.tar.gz
+
+# ④ 私有 GitHub Release
+scripts/fetch-vendor.sh --gh-repo owner/higo-vendor-dl
+
+# 只想知道还缺什么：
+scripts/fetch-vendor.sh --list-missing
 ```
+
+- **构建本身不需要预先解压**：文件进了 `dl/` 就够了，解压在编译时由 OpenWrt 完成。
+- tarball 名与用途：`mt7993_…`（`mt_wifi7`+`mt_hwifi` 共用）、`warp_…`、`mt_wifi_osal-…`；
+  `datconf-…` 已入库，无需自备。
+- 想更严格可以把 `PKG_HASH` 的 `skip` 升级成真实 sha256（会改 5 个 Makefile）：
+  `scripts/fetch-vendor.sh --set-hashes --from /path/to/sdk/dl`
+- 详见 `dl/README.md`。
 
 > 来源：MTK `mtk-wifi-mt7987-mt7990-mt7992-mt7993-v8.3.1.3` SDK 的 `dl/` 目录。
 

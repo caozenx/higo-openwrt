@@ -257,6 +257,59 @@ scripts/build-docker.sh
 ⚠️ 这样出的镜像**没有 Wi-Fi 驱动，只能用来做编译验证，不能刷机**。验证完记得
 把 `configs/h5000m.extra` 和 `dl/` 里的占位文件删掉。
 
+### 1.10 专有 SDK 从哪来 + 一条可能不需要它的路线（2026-10-17 查证）
+
+**那 3 个 tarball 的真实出处**（以后找料照这个找）：
+
+```
+SDK 包名: mtk-wifi-mt7987-mt7990-mt7992-mt7993-v8.3.1.3_SDK-20250919-external.tar.xz
+SHA256  : e1814c2a6726fcf694e452ffc6959a26cf8d5ab0218a246b821ecda3ebbd0119
+          （那 3 个 tarball 就在这个包的 dl/ 目录里，另附 Release Note PDF）
+官方源  : https://git01.mediatek.com/openwrt/feeds/mtk-openwrt-feeds
+          ⚠️ 实测 HTTP 401 —— 需要 MTK **授权账号**，没有任何公开下载地址
+```
+
+已搜过 GitHub / OpenWrt 论坛 / iopsys 镜像，以及本机（含废纸篓、其它卷）和原仓库
+`higowrt/dl/`：**都没有**。原 README 当年写的就是 `cp /path/to/...`，说明原作者也是从
+别处拿的。可行途径：
+
+1. **找 H5000M 移植的作者 / 供应商要**（最实际，他手上一定有）。
+2. 问 Hiveton（整机厂）或 MT7992 模组厂要对应 SDK 发布。
+3. 向 MTK 申请 SDK 授权（一般需 NDA / 客户身份）。
+
+拿到 SDK 包后**一条命令即可**（`--archive` 会自动解压并挑出那 3 个文件）：
+
+```bash
+scripts/fetch-vendor.sh --archive mtk-wifi-mt7987-mt7990-mt7992-mt7993-v8.3.1.3_SDK-20250919-external.tar.xz --set-hashes
+```
+
+**另一条路线：改用主线开源 `mt76`（SoftMAC），完全不需要这些文件。**
+
+- 我们锁定的 OpenWrt 版本里**已经带了** `kmod-mt7996e`（驱动，覆盖 MT7990/7992/7996）
+  + `kmod-mt7992-firmware`（含 `mt7992_eeprom.bin` 等），**全部公开可下载**；
+  而 defconfig 里这些是 `is not set`，走的是闭源 `kmod-mt_wifi7`。
+- **MTK 自己的 Release Note**（`Mediatek Upstream SoftMAC WiFi Driver - MT76 Release Note`）
+  明确列出：`Filogic860/MT7992 802.11a/b/g/n/ac/ax/be BE7200/BE5000 2.4/5G PCIe Chip`，
+  默认 EEPROM = `mt7992_eeprom.bin` → **MT7992 + 主线 mt76 是 MTK 官方支持的组合**。
+- 旁证：`openwrt/mt76` issue #1078 有人贴出 MT7992E 在 mt76 下完整的 2.4G+5G
+  `iw phy0 info`（HE/EHT 齐全）；mt76 上游 2025-11 仍在提交
+  `mt7996: fix implicit beamforming support for mt7992` 一类的修复。
+- H5000M 的 `&pcie0`/`&pcie1` 都是 `okay`，而 MT7992 是 PCIe 设备 → 具备切换条件。
+
+风险（**必须真机验证**）：
+
+| 项 | 说明 |
+|---|---|
+| 校准数据 | 用公开的 `mt7992_eeprom.bin`（参考板默认值）；若 H5000M 的出厂校准存在专有格式里，功率/速率可能不对 |
+| 已知 bug | 5G 160MHz 高信道（≥149）可能被误判为 6GHz（openwrt#20519）；低信道正常 |
+| 功能面 | 失去 `mwctl`/`luci-app-mtk`/MTK 专有 MLO；UI 走标准 OpenWrt |
+| 无法本地验证 | 无真机 → 只能做到"编译出镜像 + 写 DTS"，跑起来看 `dmesg` 得靠真机 |
+
+闭源 vs 开源的大致差异：闭源在峰值吞吐与多客户端 offload 上略优（量级 10~20% 以内）、
+厂验更稳、功能最全，但**绑定 SDK 指定的内核版本**，且**拿不到包就完全无法构建**；
+mt76 体积小（省掉 ≈12 MB 的 mt_wifi7/mwctl/datconf/luci-app-mtk 整套）、可跟随内核升级、
+可审计、CI 友好。
+
 ---
 
 
@@ -273,7 +326,7 @@ configs/                     # mt7987_h5000m.config（唯一 profile）/ common.
 dl/                          # 专有 tarball（大文件不入库）+ SHA256SUMS
 scripts/build.sh             # 一键构建
 scripts/build-docker.sh      # Docker 构建（macOS/Windows）
-scripts/fetch-vendor.sh      # 收集 MTK SDK tarball + 生成校验和
+scripts/fetch-vendor.sh      # 收集/下载/解压归档 → dl/ + 生成校验和
 scripts/set-vendor-hashes.sh # 计算并回填 PKG_HASH
 docs/                        # MANIFEST / MIGRATION_ISSUES / 5G-MODEM / HANDOFF(本文件)
 .github/workflows/build.yml  # CI 单 profile 构建 + Release
@@ -318,9 +371,12 @@ docs/                        # MANIFEST / MIGRATION_ISSUES / 5G-MODEM / HANDOFF(
 ```bash
 cd ~/Workspace/higo-openwrt
 
-# 备好专有 tarball（二选一）
-scripts/fetch-vendor.sh /path/to/mtk-sdk/dl
-scripts/set-vendor-hashes.sh          # 顺便把 sha256 回填进 Makefile
+# 备好专有 tarball（任选一种；详见 dl/README.md）
+scripts/fetch-vendor.sh /path/to/mtk-sdk/dl            # 本地 SDK 目录
+scripts/fetch-vendor.sh --archive vendor-sdk.tar.gz    # 大归档 → 解压挑文件
+scripts/fetch-vendor.sh --base-url https://host/dir    # 逐文件下载
+scripts/fetch-vendor.sh --list-missing                 # 只报告缺哪些
+scripts/fetch-vendor.sh --from /path/to/mtk-sdk/dl --set-hashes   # 顺便回填真实 sha256
 
 # 构建（默认带品牌 + 5G 选包）；参数 h5000m 可省略
 scripts/build.sh
@@ -345,9 +401,12 @@ CI：`.github/workflows/build.yml` 支持手动触发 / 每周定时 / 打 `v*` 
       全部补丁 / feeds / LuCI / 5G 选包 / 镜像打包）真编通过，并拿到真实包清单与体积。
 - [ ] **完整编译（带 10 个 vendor kmod）仍未做**：缺的就是那 3 个 MTK 专有 tarball
       （本机没有、MTK 官方 feed 需授权、公开镜像 `mediatek/mtk-openwrt-feeds` 不含
-      wifi7/osal/warp 源码）。**拿到后第一件事：放进 `dl/` → `scripts/set-vendor-hashes.sh`
-      → 删掉临时片段 `configs/h5000m.extra` 与 `dl/` 里的占位 tarball → `scripts/build.sh`**
-      （见 §3.1）。
+      wifi7/osal/warp 源码）。**它们来自
+      `mtk-wifi-mt7987-mt7990-mt7992-mt7993-v8.3.1.3_SDK-20250919-external.tar.xz`
+      （SHA256 `e1814c2a…0119`）的 `dl/` 目录**，拿料途径见 §1.10。
+      **拿到后第一件事：`scripts/fetch-vendor.sh --archive <SDK包> --set-hashes`
+      → 删掉临时片段 `configs/h5000m.extra` → `scripts/build.sh`**（见 §3.1）。
+      若拿到的是已经在 `dl/` 里的 3 个文件，直接 `--from <dir> --set-hashes` 即可。
 - [ ] **上真机验证 Wi-Fi SKU**：默认 `BE5040`；若频段异常，用 `SKU=BE3600SDB CLEAN_CHIP=1 scripts/build.sh` 出第二包 A/B（见 §1.5）。
 - [ ] 把专有 tarball 放到私有 Release，并在 GitHub 配好 secret `VL_REPO`/`VL_TOKEN`（或设仓库 Variable `SKU` 切换 SKU）。
 - [ ] `patches/0006` 把 `MEDIATEK_NETSYS_*` 放进 `generic/config-6.12`（影响所有 target），可评估只留在 `mediatek/filogic`。
@@ -358,8 +417,13 @@ CI：`.github/workflows/build.yml` 支持手动触发 / 每周定时 / 打 `v*` 
       `higowrt-modem-check` 实测结果决定保留 QMI / MBIM / MHI 中的哪几套。
       备选档位：只留 QMI → 省 `libmbim-glib` 0.9 MB + `umbim` + `kmod-mhi-*`；
       更激进可连 `ModemManager` 2.5 MB + `dbus` 一起砍、改用 netifd 直连 QMI。
-- [ ] 评估是否改回**标准 wifi 栈**（弃 `wifi-profile`/`luci-app-mtk`/`datconf`/`mwctl`，删 `patches/0008`）。
-      ⚠️ 注意：`MIGRATION_ISSUES.md` §7 写着「已禁用 wifi-profile」，但**原仓库最终代码是启用它的**（`wifi-scripts/Makefile` 里那句 `rm -f /sbin/wifi` 就是为它让路），本仓库按**原代码**保留。§7 那段是历史记录，不可作为依据。
+- [ ] **评估改写开源 `mt76`（SoftMAC）**（弃 `wifi-profile`/`luci-app-mtk`/`datconf`/`mwctl`，
+      删 `patches/0008`）—— 详见 §1.10。要点：MT7992 + 主线 mt76 是 **MTK 官方支持**的组合，
+      驱动与固件都公开；改用后可彻底摆脱 3 个专有 tarball、省 ≈12 MB、可跟内核升级。
+      待改：defconfig 打开 `kmod-mt7996e` + `kmod-mt7992-firmware`、关掉闭源栈、
+      可能要给 DTS 补 Wi-Fi/PCIe 相关节点（当前 DTS 没有任何 Wi-Fi 节点）。
+      ⚠️ 校准数据与实机行为**必须真机验证**。
+      另：`MIGRATION_ISSUES.md` §7 写着「已禁用 wifi-profile」，但**原仓库最终代码是启用它的**（`wifi-scripts/Makefile` 里那句 `rm -f /sbin/wifi` 就是为它让路），本仓库按**原代码**保留。§7 那段是历史记录，不可作为依据。
 - [ ] `NO_BRAND=1` 与 `common.extra` 至少各出一次固件做对比。
 - [ ] 5G 模组上机验证：跑 `higowrt-modem-check` 看 USB / 串口 / QMI / MBIM 的实际形态，
       再按上面那条决定精简到哪一档。
@@ -395,6 +459,17 @@ CI：`.github/workflows/build.yml` 支持手动触发 / 每周定时 / 打 `v*` 
     的某个变体和 `linux-firmware` 都出现过「日志里一行错误文本都没有就直接失败」，
     而 `-j1` 重编就过、`dmesg` 里没有 OOM。遇到这种失败先降并行度重试（`JOBS=4`），
     不要一头扎进代码里找问题。
+11. **`openwrt/dl/` 里的旧文件会骗过你**：构建根目录（`build/`）是**持久化**的。
+    早期 `build.sh` 的逻辑是「`$O/dl/$f` 已存在就跳过拷贝」，于是换了 `dl/` 里的文件后
+    构建树里仍是旧文件，紧接着的 `SHA256SUMS` 校验用的是**新清单** → 报
+    「tarball 校验失败」，但**完全不提「你用的是旧文件」**，极难查。
+    已改成**总是覆盖**（`cp -f`，几个文件的拷贝开销可忽略）。
+12. **macOS 自带的是 bash 3.2**（不支持 `declare -A` / `mapfile`）。
+    `scripts/set-vendor-hashes.sh` 早期版本用 `declare -A`，在 `set -u` 下会把
+    `[文件名]` 当变量下标解析 → 直接崩 `unbound variable`；而文档恰好让用户在
+    macOS 上跑它。已改成 `case` 映射。**新增脚本时不要用关联数组。**
+    同源问题：`printf '  %s/%s\n' "$dir" "${arr[@]}"` 会把参数**两两配对**导致输出
+    错位（实测踩到），列多项请用 `for` 循环。
 
 ---
 

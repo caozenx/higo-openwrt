@@ -89,9 +89,13 @@ done
 log "准备专有 tarball -> openwrt/dl"
 mkdir -p "$O/dl"
 for f in mt7993_20250919-39602c.tar.xz warp_20250919-9c1cfa.tar.xz mt_wifi_osal-a53418.tar.xz datconf-757f9679.tar.bz2; do
-  if [[ -f "$O/dl/$f" ]]; then continue; fi
+  # 以 $DL_DIR 为准，**总是覆盖**：构建根目录（默认 build/）是持久化的，里面可能留着
+  # 上一次的旧文件；若跳过拷贝，紧接着的 SHA256SUMS 校验就会因为「内容与清单不符」而
+  # 失败，且报错完全不提「用了旧文件」，很难查。拷贝这几个文件的开销可忽略。
   if [[ -f "$DL_DIR/$f" ]]; then
-    cp -p "$DL_DIR/$f" "$O/dl/$f"
+    cp -f "$DL_DIR/$f" "$O/dl/$f"
+  elif [[ -f "$O/dl/$f" ]]; then
+    echo "  警告: $DL_DIR/$f 不存在，沿用构建目录里的旧文件 $(basename "$O/dl/$f")" >&2
   elif [[ -n "${DL_BASE_URL:-}" ]]; then
     echo "  download $f"; curl -fL --retry 3 -o "$O/dl/$f" "$DL_BASE_URL/$f"
   else

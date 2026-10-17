@@ -27,27 +27,43 @@ set_hash() { # $1=Makefile  $2=hash
   echo "  ok  $mf  ->  $h"
 }
 
-declare -a NAMES=(mt7993_20250919-39602c.tar.xz warp_20250919-9c1cfa.tar.xz \
-                  mt_wifi_osal-a53418.tar.xz datconf-757f9679.tar.bz2)
+declare -a NAMES=(datconf-757f9679.tar.bz2 mt7993_20250919-39602c.tar.xz \
+                  mt_wifi_osal-a53418.tar.xz warp_20250919-9c1cfa.tar.xz)
 
-declare -A TARGETS=(
-  [mt7993_20250919-39602c.tar.xz]="overlay/package/mtk/drivers/mt_wifi7/Makefile overlay/package/mtk/drivers/mt_hwifi/Makefile"
-  [warp_20250919-9c1cfa.tar.xz]="overlay/package/mtk/drivers/warp/Makefile"
-  [mt_wifi_osal-a53418.tar.xz]="overlay/package/mtk/drivers/mt_wifi_osal/Makefile"
-  [datconf-757f9679.tar.bz2]="overlay/package/mtk/applications/datconf/Makefile"
-)
+# 文件名 → 需要改写 PKG_HASH 的 Makefile
+# 用 case 而不是 `declare -A`：macOS 自带的是 bash 3.2，**不支持关联数组**，
+# 在 `set -u` 下 `declare -A X=( [k]=v )` 会把 [k] 当变量下标解析 →
+# 直接报 "unbound variable"（本机实测踩到过）。
+targets_for() {
+  case "$1" in
+    mt7993_20250919-39602c.tar.xz)
+      echo "overlay/package/mtk/drivers/mt_wifi7/Makefile"
+      echo "overlay/package/mtk/drivers/mt_hwifi/Makefile" ;;
+    warp_20250919-9c1cfa.tar.xz)
+      echo "overlay/package/mtk/drivers/warp/Makefile" ;;
+    mt_wifi_osal-a53418.tar.xz)
+      echo "overlay/package/mtk/drivers/mt_wifi_osal/Makefile" ;;
+    datconf-757f9679.tar.bz2)
+      echo "overlay/package/mtk/applications/datconf/Makefile" ;;
+  esac
+}
 
 : > dl/SHA256SUMS
+missing=0
 for f in "${NAMES[@]}"; do
   if [ ! -f "dl/$f" ]; then
-    echo "缺少 dl/$f（先跑 scripts/fetch-vendor.sh 或手工放入）"
+    echo "缺少 dl/$f（先跑 scripts/fetch-vendor.sh 或手工放入）" >&2
+    missing=1
     continue
   fi
   h="$(sha256 "dl/$f")"
   echo "$h  $f" >> dl/SHA256SUMS
   echo "== $f"
-  for mf in ${TARGETS[$f]}; do set_hash "$mf" "$h"; done
+  while IFS= read -r mf; do
+    [ -n "$mf" ] && set_hash "$mf" "$h"
+  done < <(targets_for "$f")
 done
 
 echo
 echo "==> dl/SHA256SUMS"; cat dl/SHA256SUMS
+[ "$missing" -eq 0 ] || exit 2

@@ -75,8 +75,11 @@ scripts/build.sh                      # 唯一构建入口（参数 h5000m 可�
 NO_BRAND=1 scripts/build.sh           # 尽量贴近官方（跳过品牌补丁）
 SKU=BE3600SDB CLEAN_CHIP=1 scripts/build.sh   # 换 SKU 做 A/B（必须 CLEAN_CHIP=1）
 scripts/build-docker.sh               # macOS/Windows 用（Docker 命名卷，规避大小写敏感问题）
-scripts/fetch-vendor.sh /path/to/sdk/dl        # 收集 3 个专有 tarball
+scripts/fetch-vendor.sh /path/to/sdk/dl        # 收集 3 个专有 tarball（见 dl/README.md）
+scripts/fetch-vendor.sh --archive vendor.tar.gz  # 从一个「大归档」里解压并挑出来
+scripts/fetch-vendor.sh --list-missing         # 只报告缺哪些（退出码 1 = 缺）
 scripts/set-vendor-hashes.sh          # 算 sha256 并回填各 Makefile 的 PKG_HASH:=
+scripts/selftest-fetch-vendor.sh      # 自测上面两个 vendor 脚本（临时副本里跑，0=通过）
 ```
 
 环境变量（全部可选）：`BUILD_ROOT`、`DL_DIR`、`DL_BASE_URL`、`JOBS`、`NO_BRAND`、`SKU`、`CLEAN_CHIP`。
@@ -115,9 +118,12 @@ git -C "$T" status --porcelain   # 应为空
 grep -oE '^#? ?CONFIG_[A-Za-z0-9_-]+' configs/mt7987_h5000m.config \
   | sed 's/^# //' | sort | uniq -d
 # 输出应为空（`lua5.3`/`golang1.26` 这类带点版本号会被上面的正则误截，注意肉眼排除）
+
+# 7) 改了 scripts/fetch-vendor.sh 或 set-vendor-hashes.sh 时
+scripts/selftest-fetch-vendor.sh      # 临时副本里跑全链路（含用真实 datconf 的真数据校验）
 ```
 
-> 改了 `overlay/` 或 `patches/` 之后，**必须**跑 3) 和 4)；改了脚本跑 1)；改了 CI 跑 2)。
+> 改了 `overlay/` 或 `patches/` 之后，**必须**跑 3) 和 4)；改了脚本跑 1) 和 7)；改了 CI 跑 2)。
 > 3) 需要联网拉上游；无网时可直接用 `scripts/build.sh`（它自己是 `git apply` + `patch -p1` 兜底，
 > 失败会打印 `FAIL` 并退出）。
 
@@ -165,6 +171,17 @@ done
 ## 7. 关键事实（别重新推导，这些已经查清）
 
 - **设备**：Hiveton H5000M = MT7987A + MT7992，eMMC 启动，MTK filogic target。
+- **MT7992 有两条驱动路线，本仓库走的是闭源那条**（换路线前先看 `docs/HANDOFF.md` §1.10）：
+  - 闭源 `kmod-mt_wifi7`（当前用法）→ 需要 3 个 MTK 专有 tarball，**它们来自
+    `mtk-wifi-mt7987-mt7990-mt7992-mt7993-v8.3.1.3_SDK-20250919-external.tar.xz`
+    （SHA256 `e1814c2a6726fcf694e452ffc6959a26cf8d5ab0218a246b821ecda3ebbd0119`）的 `dl/` 目录**。
+    官方源 `git01.mediatek.com/openwrt/feeds/mtk-openwrt-feeds` **需授权（实测 HTTP 401）**，
+    **没有任何公开下载地址** —— 别再重复搜了，要就得找移植作者/供应商要，或申请授权。
+  - 开源 `mt76`（SoftMAC）→ `kmod-mt7996e` + `kmod-mt7992-firmware` **就在本仓库锁定的
+    OpenWrt 版本里、公开可下载**（defconfig 里目前是 `is not set`）。MTK 官方 Release Note
+    `Mediatek Upstream SoftMAC WiFi Driver - MT76 Release Note` 明确列
+    `Filogic860/MT7992 … BE7200/BE5000 2.4/5G PCIe Chip`，默认 EEPROM = `mt7992_eeprom.bin`。
+    MT7992 是 PCIe 设备，DTS 里 `&pcie0`/`&pcie1` 都已 `okay`。
 - **Wi-Fi SKU = `BE5040`**（`CONFIG_MTK_WIFI7_SKU_TYPE`）。**不是** `BE3600SDB`。
   「BE3600」是产品速率档位/营销名，不是驱动 SKU。证据：原厂 `mt7992-be5400/l1profile.dat`
   → `mt7992.5040.1.dat` → 双频 `b0`+`b1`；且原仓库提交 `af22d76` 明确记录
@@ -258,6 +275,10 @@ fix(h5000m): 互换 LAN/WAN — eth0(RTL8221)=WAN, eth1(内置2.5G)+hnat=LAN
   和 7 个 `*-bl2.bin`）；`profiles.json` 的生成脚本在**版本号不变时会沿用旧文件**（上游设计）。
   **判断配置是否真的生效，看 `.manifest` 和 `tmp/.targetinfo`，不要看 `profiles.json`。**
   `build-docker.sh` 已在拷贝前清空 `artifacts/`。
+- ⚠️ **macOS 自带的是 bash 3.2**（不支持 `declare -A` / `mapfile`）。`scripts/*.sh` 必须
+  能在 3.2 上跑 —— 实测 `set-vendor-hashes.sh` 早期用 `declare -A`，`set -u` 下会把
+  `[文件名]` 当变量下标解析、直接崩 `unbound variable`。用 `case` 做映射即可。
+  另：`printf 'x %s/%s\n' "$d" "${arr[@]}"` 会把参数**两两配对**、输出错位，列多项用 `for`。
 - 本机**没有**那 3 个专有 tarball；Wi-Fi 与 5G **从未在真机上验证**过（原移植也是 x86 VM 上完成的）。
   首刷建议先用 `*-recovery.itb` 内存启动确认，再写 eMMC。
 - 那 3 个 tarball **无法从公开渠道获取**（MTK 授权 SDK；公开镜像 `mediatek/mtk-openwrt-feeds`

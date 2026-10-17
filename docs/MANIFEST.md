@@ -109,7 +109,7 @@
 | 路径 | 作用 |
 |---|---|
 | `configs/common.extra` | 5G 模组选包片段（`build.sh` 自动追加） |
-| `scripts/fetch-vendor.sh`、`scripts/set-vendor-hashes.sh` | 收集专有 tarball / 回填 `PKG_HASH` |
+| `scripts/fetch-vendor.sh`、`scripts/set-vendor-hashes.sh` | 收集/下载/解压专有 tarball → `dl/`；回填 `PKG_HASH`（`scripts/selftest-fetch-vendor.sh` 是它们的自测） |
 | `overlay/target/linux/mediatek/filogic/base-files/etc/board.d/02_higowrt` | WiFi 2G/5G LED 默认 |
 | `overlay/target/linux/mediatek/filogic/base-files/etc/uci-defaults/99-higowrt-fan` | 风扇默认（低速下限） |
 | `overlay/target/linux/mediatek/filogic/base-files/usr/bin/higowrt-modem-check` | 5G 模组自检 |
