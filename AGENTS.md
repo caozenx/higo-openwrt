@@ -170,7 +170,12 @@ done
   改它必须配 `CLEAN_CHIP=1`（编译期单值，否则残留上次的固件）。
 - **`WARP_CHIPSET=mt7987` / `WARP_VERSION=3_1` 固定**，本次构建不改。
 - **`mt_wifi7` 与 `mt_hwifi` 共用 `PKG_BUILD_DIR`** → `mt_hwifi` 的补丁要放在 `mt_wifi7/patches/`。
-- **`PKG_SOURCE_URL` 必须非空**，否则 OpenWrt 的下载规则不生效；不要用 `PKG_HASH:=skip`。
+- **`PKG_HASH` 只能填真实 sha256/md5 或字面量 `skip`，绝不留空**。
+  留空 → `include/download.mk` 把空值当哨兵 `x` → `download.pl` 报
+  `Cannot find appropriate hash command`，**`dl/` 里已有 tarball 也一样失败**（已实测）。
+  现状：3 个 MTK 专有包用 `skip`（tarball 未到），`datconf` 用它自己的真实 sha256。
+  `scripts/set-vendor-hashes.sh` 可把 `skip` 升级成真实 sha256。
+- **`PKG_SOURCE_URL` 必须非空**，否则 OpenWrt 的下载规则不生效。
 - **`wifi-profile` 是启用的**（原厂 `wifi_jedi` 顶掉官方 `/sbin/wifi`，见 `patches/0008`）。
   `docs/MIGRATION_ISSUES.md` §6.1、§7 的相反结论是**改动前的历史档案**，不要照它改。
 - **`/sbin/wifi` 是 Lua 脚本，所以 `CONFIG_PACKAGE_lua=y` 是硬需求**（别把它关掉）。

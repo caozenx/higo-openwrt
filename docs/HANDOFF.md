@@ -264,7 +264,13 @@ CI：`.github/workflows/build.yml` 支持手动触发 / 每周定时 / 打 `v*` 
 
 ## 6. 已知坑
 
-1. `PKG_HASH:=skip` **不能用**：本地已有 tarball 时 `download.pl` 会判 hash 不匹配直接失败。所以用「真实 URL + `scripts/set-vendor-hashes.sh` 填 sha256」；本地有文件时不会触发下载。
+1. `PKG_HASH` **绝不能留空**：`include/download.mk` 会把空值当哨兵 `x` 传给 `download.pl`，
+   后者直接报 `Cannot find appropriate hash command` —— **即使 `dl/` 里已经有 tarball 也照样失败**。
+   已实测三种写法：空值 ❌ ／ 字面量 `skip` ✅ ／ 真实 sha256 ✅。
+   所以合法写法只有两种：**真实 sha256**（已验证的包用它，如 `datconf`）或**字面量 `skip`**
+   （暂时拿不到 tarball 的 3 个 MTK 包用它；完整性由 `dl/SHA256SUMS` + `build.sh` 兜底）。
+   `scripts/set-vendor-hashes.sh` 可随时把 `skip` 升级成真实 sha256。
+   ⚠️ 本节早先写的「`skip` 不能用」是**错的**（会误导），已按实测结论更正。
 2. `PKG_SOURCE_URL` **非空**才会启用 OpenWrt 的下载规则；为空时「必须有 dl/ 本地文件」。
 3. `mt_wifi7` 与 `mt_hwifi` **共享** `PKG_BUILD_DIR`，hwifi 的补丁必须并进 wifi7 的 `patches/`（本仓库已如此）。
 4. SKU/CHIP 是编译期单值，换 SKU 或芯片必须 `CLEAN_CHIP=1`（清理 `mt_wifi7`/`warp`）。

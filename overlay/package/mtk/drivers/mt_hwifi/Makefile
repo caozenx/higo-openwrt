@@ -11,9 +11,9 @@ WIFI_DRIVER_NAME:=mt_wifi7
 P4REV:=
 PKG_VERSION:=1
 PKG_SOURCE:=mt7993_20250919-39602c.tar.xz
-# 与 mt_wifi7 共用同一份 SDK tarball（见 mt_wifi7/Makefile 说明）
+# 与 mt_wifi7 共用同一份 SDK tarball（见 mt_wifi7/Makefile 里关于 PKG_HASH 的说明）
 PKG_SOURCE_URL:=https://example.com/higo-vendor-sdk
-PKG_HASH:=
+PKG_HASH:=skip
 PKG_BUILD_DIR:=$(KERNEL_BUILD_DIR)/$(WIFI_DRIVER_NAME)
 PKG_KCONFIG:= \
 	SUPPORT_OPENWRT \

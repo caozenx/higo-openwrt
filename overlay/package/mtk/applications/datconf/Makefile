@@ -10,9 +10,12 @@ include $(TOPDIR)/rules.mk
 PKG_NAME:=datconf
 PKG_REVISION:=757f9679
 PKG_SOURCE:=$(PKG_NAME)-$(PKG_REVISION).tar.bz2
-# 源码包已在 dl/ 内；如需让 OpenWrt 自动下载，填 mirror 地址与 sha256
+# 源码包已随仓库分发在 dl/ 内，所以这里直接写真实 sha256。
+# ⚠️ 不能留空：空值会被 include/download.mk 当成哨兵 "x"，download.pl 随即报
+#    "Cannot find appropriate hash command" —— 即使 dl/ 里已经有文件也照样失败。
+#    （合法取值只有「真实 sha256/md5」或字面量 skip，详见 mt_wifi7/Makefile 的说明）
 PKG_SOURCE_URL:=https://example.com/higo-vendor-sdk
-PKG_HASH:=
+PKG_HASH:=3cbb7489e3df1be52d184b600129a6081e7225981acdbcc5c2cb7149f11c37f1
 PKG_RELEASE:=1
 PKG_USE_NINJA:=0
 

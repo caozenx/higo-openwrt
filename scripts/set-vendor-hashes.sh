@@ -3,6 +3,10 @@
 # 从 dl/ 里的专有 tarball 计算 sha256，并写回对应 Makefile 的 PKG_HASH:= 行。
 # 运行前请先把 4 个 tarball 放进 dl/（见 dl/README.md）。
 #
+# 各 Makefile 默认值：datconf = 真实 sha256（已入库）；3 个 MTK 专有包 = 字面量 skip
+# （tarball 未到位也能构建）。本脚本会把它们**升级**成真实 sha256，更严格，推荐做一次。
+# 注意：PKG_HASH 绝不能留空（空值 = 哨兵 "x"，download.pl 会直接报错）。
+#
 #   scripts/set-vendor-hashes.sh
 #
 set -euo pipefail

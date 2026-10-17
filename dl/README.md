@@ -35,8 +35,16 @@ cp /path/to/mt7993_20250919-39602c.tar.xz /path/to/warp_20250919-9c1cfa.tar.xz \
 
 ## 校验
 
-构建前会用本目录的 `SHA256SUMS` 校验 tarball。生成/更新清单**请用脚本**（它会同时把
-sha256 回填进各 Makefile 的 `PKG_HASH:=`，让 OpenWrt 的下载机制也能用）：
+`dl/SHA256SUMS` 用于构建前校验 tarball（`scripts/build.sh` 会执行）。
+
+各 Makefile 里的 `PKG_HASH` 只有两种合法取值：
+- **真实 sha256** —— `datconf` 用它（该包已入库，哈希确定）
+- **字面量 `skip`** —— 3 个 MTK 专有包默认用它，这样把 tarball 丢进 `dl/` 就能直接构建
+
+⚠️ **绝不能留空**：空值会被 `download.mk` 当成哨兵 `x`，`download.pl` 直接报
+`Cannot find appropriate hash command`，**即使 `dl/` 里已有文件也失败**。
+
+生成/更新清单，并**顺带把 `skip` 升级成真实 sha256**（更严格，推荐做一次）：
 
 ```bash
 scripts/set-vendor-hashes.sh

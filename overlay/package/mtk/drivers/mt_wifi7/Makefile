@@ -12,9 +12,15 @@ PKG_VERSION:=1
 PKG_SOURCE:=mt7993_20250919-39602c.tar.xz
 # 专有 SDK 源码包（不随仓库分发）。私有镜像地址改成你自己的；
 # 不用 mirror 时把 tarball 放到 <openwrt>/dl/ 即可（scripts/build.sh 会自动放）。
-# 运行 scripts/set-vendor-hashes.sh 可自动填充下方 PKG_HASH。
+#
+# PKG_HASH 只能填「真实 sha256/md5」或字面量 skip，**绝不能留空**：
+#   - 留空 → include/download.mk 把空值当哨兵 "x" → download.pl 报
+#     "Cannot find appropriate hash command"，**即使 dl/ 里已有 tarball 也会失败**
+#   - skip → 跳过单包校验，下载规则照常（本地有文件就用本地的，没有才去 URL 下）
+#   - 完整性由 dl/SHA256SUMS + scripts/build.sh 的校验兜底；
+#     scripts/set-vendor-hashes.sh 可把下面这行升级成真实 sha256
 PKG_SOURCE_URL:=https://example.com/higo-vendor-sdk
-PKG_HASH:=
+PKG_HASH:=skip
 PKG_BUILD_DIR:=$(KERNEL_BUILD_DIR)/$(PKG_NAME)
 
 PKG_KCONFIG:= \

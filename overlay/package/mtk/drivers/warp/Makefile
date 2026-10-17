@@ -10,9 +10,9 @@ PKG_NAME:=warp
 P4REV:=
 PKG_VERSION:=
 PKG_SOURCE:=warp_20250919-9c1cfa.tar.xz
-# 专有 SDK 源码包（不随仓库分发）。见 mt_wifi7/Makefile 说明。
+# 专有 SDK 源码包（不随仓库分发）。见 mt_wifi7/Makefile 里关于 PKG_HASH 的说明。
 PKG_SOURCE_URL:=https://example.com/higo-vendor-sdk
-PKG_HASH:=
+PKG_HASH:=skip
 PKG_BUILD_DIR:=$(KERNEL_BUILD_DIR)/$(PKG_NAME)
 
 PKG_KCONFIG:= \
