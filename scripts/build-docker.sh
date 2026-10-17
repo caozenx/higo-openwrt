@@ -10,6 +10,11 @@
 #   本机为 Apple Silicon 时用它自带的 aarch64 容器即可，无需 x86 模拟：
 #   gcc-multilib/g++-multilib 只对 x86 target 有意义，脚本已按架构条件安装。
 #
+# 注意：容器内以 root 编译，必须带 FORCE_UNSAFE_CONFIGURE=1（脚本已加）。
+#       GNU tar 的 configure 会检测到 root 并直接报错：
+#         "you should not run configure as root (set FORCE_UNSAFE_CONFIGURE=1 ...)"
+#       官方 openwrt/sdk 镜像也是用这个变量绕过；非 root 身份编译则无此问题。
+#
 # 用法:
 #   scripts/build-docker.sh [h5000m] [额外传给 build.sh 的环境变量...]
 #   本仓库只支持 Hiveton H5000M，参数可省略。
@@ -42,6 +47,7 @@ docker run --rm \
   -e PROFILE="$PROFILE" \
   -e BUILD_ROOT=/build \
   -e DL_DIR=/work/dl \
+  -e FORCE_UNSAFE_CONFIGURE=1 \
   -e NO_BRAND="${NO_BRAND:-}" \
   -e SKU="${SKU:-}" \
   -e DL_BASE_URL="${DL_BASE_URL:-}" \

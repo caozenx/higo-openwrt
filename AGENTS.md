@@ -220,6 +220,9 @@ fix(h5000m): 互换 LAN/WAN — eth0(RTL8221)=WAN, eth1(内置2.5G)+hnat=LAN
   colima start --cpu 6 --memory 12 --disk 60
   ```
   用 Colima 自带的 aarch64 容器即可（目标本身也是 aarch64，无需 x86 模拟）。
+- ⚠️ **容器里以 root 编译必须带 `FORCE_UNSAFE_CONFIGURE=1`**（`build-docker.sh` 已加）：
+  否则 GNU tar 的 configure 直接报 *"you should not run configure as root"* → 构建在
+  `tools/tar` 阶段就挂掉。官方 `openwrt/sdk` 镜像同样用这个变量绕过。
 - ⚠️ **`gcc-multilib`/`g++-multilib` 在 arm64 上不存在**：`build-docker.sh` 已按
   `dpkg --print-architecture` 条件安装，别改回无条件安装（会让容器里 apt 直接失败）。
 - ⚠️ 容器里没有 `shasum` 的可能性（属 `perl` 包）→ 脚本里校验一律**优先 `sha256sum`**，回退 `shasum`。

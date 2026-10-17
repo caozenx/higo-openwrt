@@ -126,21 +126,26 @@ overlay/package/mtk/drivers/wifi-profile/files/mt7992-be5400/l1profile.dat
 3. 🟡 apt 列表漏了 **`patch`**（`build.sh` 的补丁回退分支要用）→ 已补。
 4. ⚪ 官方旧文档里的 `python3-distutils` 在 24.04 已删除，**不能加**（本仓库脚本里本来就没有）。
 
+5. 🔴 **容器里以 root 编译必须带 `FORCE_UNSAFE_CONFIGURE=1`**（`build-docker.sh` 已加）。
+   首次真跑构建时在 `tools/tar` 挂掉，报错是 GNU tar 自己的检查：
+   `configure: error: you should not run configure as root (set FORCE_UNSAFE_CONFIGURE=1 ...)`。
+   官方 `openwrt/sdk` 镜像也是这么绕过的；非 root 身份编译无此问题。
+
 **配置侧修复（编译前就该修）**
 
-5. 🔴 **补 `/usr/bin/lua`**：`/sbin/wifi` = `wifi_jedi`，是 `#!/usr/bin/env lua` 脚本，
+6. 🔴 **补 `/usr/bin/lua`**：`/sbin/wifi` = `wifi_jedi`，是 `#!/usr/bin/env lua` 脚本，
    而 `/etc/init.d/boot:58` 会无条件执行 `/sbin/wifi config`；原 defconfig 里
    `CONFIG_PACKAGE_lua` 是关的（`datconf-lua` 只依赖 `liblua`，`liblua` 只装 `.so`；
    LuCI 25.12 是 ucode-only 已不再带 lua）→ **开机 wifi 配置必然失败**。
    已置 `CONFIG_PACKAGE_lua=y`（约 70 KB）。
-6. 🧹 **defconfig 归位**：文件 7671–7680 是手工追加的 10 行，与正文里早先的
+7. 🧹 **defconfig 归位**：文件 7671–7680 是手工追加的 10 行，与正文里早先的
    `# CONFIG_PACKAGE_xxx is not set` **自相矛盾**（kconfig 后者覆盖前者，所以实际是开的）。
    已把这 10 个开关合并进正文对应位置、删掉尾部 10 行 → 现在**同一符号只出现一次**。
-7. 🧹 **删 `knot-resolver` 残留**：`CONFIG_PACKAGE_knot-resolver_dnstap=y` 会带进
+8. 🧹 **删 `knot-resolver` 残留**：`CONFIG_PACKAGE_knot-resolver_dnstap=y` 会带进
    一个完整的递归 DNS 解析器（knot-resolver + knot-libs + luajit + libgnutls + libstdcpp
    + libuv1 + lmdb + libnghttp2 + libprotobuf-c + libfstrm + luasocket，约 5 MB），
    没人用它。已显式关掉。
-8. 🧹 **`configs/common.extra` 里 `bsbf-quectel-usbnet` 是个不存在的包名**
+9. 🧹 **`configs/common.extra` 里 `bsbf-quectel-usbnet` 是个不存在的包名**
    （主树 / 24.10 feed 索引都查不到）→ 写不存在的符号会被 `make defconfig` **静默丢弃**，
    已删除；`quectel-timesync` 确认存在于 feed，保留。
 

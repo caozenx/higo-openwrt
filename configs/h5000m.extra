@@ -1,0 +1,23 @@
+#
+# ⚠️ 临时文件（仅用于「无 vendor tarball 的半量验证构建」）——不要提交！
+#
+# 背景：MTK 的 3 个专有 tarball 暂时拿不到，但想先验证「除这 4 个驱动包之外的一切」
+#       （toolchain / 内核 / DTS / 8 个补丁 / feeds / 5G 选包 / LuCI / 镜像打包）。
+# 做法：把由那 3 个 tarball 提供的驱动 kmod 关掉。它们之间只互相依赖，
+#       userspace（wifi-profile/luci-app-mtk/mwctl/datconf）不 select 它们，所以能关干净。
+#
+# 用法：JOBS=6 scripts/build-docker.sh
+# 用完请删除本文件。见 docs/HANDOFF.md §5 / §1.8。
+#
+# 注意：这样出来的镜像**没有 Wi-Fi 驱动**，只能用来做编译验证，不能刷机！
+
+# CONFIG_PACKAGE_kmod-mt_wifi7 is not set      # mt_wifi7   (tarball: mt7993_*)
+# CONFIG_PACKAGE_kmod-mt_wifi_osal is not set  # mt_wifi_osal (tarball: mt_wifi_osal-*)
+# CONFIG_PACKAGE_kmod-mt_hwifi is not set      # mt_hwifi   (tarball: mt7993_*)
+# CONFIG_PACKAGE_kmod-warp is not set          # warp       (tarball: warp_*)
+# CONFIG_PACKAGE_kmod-mtk_pci is not set       # 以下都由 mt_hwifi 的 Makefile 定义
+# CONFIG_PACKAGE_kmod-mtk_wed is not set
+# CONFIG_PACKAGE_kmod-connac_if is not set
+# CONFIG_PACKAGE_kmod-mt7992 is not set
+# CONFIG_PACKAGE_kmod-mt7992_dbg is not set
+# CONFIG_PACKAGE_kmod-mt799a is not set
