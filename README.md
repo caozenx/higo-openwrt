@@ -236,5 +236,11 @@ scripts/build.sh
   详见 `docs/HANDOFF.md` §1.8。
 - ⏳ **尚未做完整编译**：3 个 MTK 专有 tarball 暂时拿不到（公开渠道没有，只能自备）。
   拿到后请先跑一次 `scripts/build.sh`。
+- ✅ **编译验证已跑通**（用「半量验证」方式：临时关掉依赖那 3 个 tarball 的 10 个 vendor kmod）：
+  `tools` / toolchain / 内核 / DTS / 补丁 / feeds / LuCI / 5G 选包 / 镜像打包**全部真编通过**。
+  产物为 **213 个包、rootfs 40.5 MB、`-recovery.itb` 11.4 MB、`-sysupgrade.bin` 12.1 MB**。
+  **结论：除 vendor tarball 本身，不缺任何构建工具或依赖。** 详见 `docs/HANDOFF.md` §1.9。
+- ✅ 已按该次验证做一轮精简：关掉 7 个只产 `*-bl2.bin` 的 TF-A 包、移除死重量 `kmod-sfp`、
+  补上 `f2fsck`（设备定义一直声明它，且它提供 `resize.f2fs`）。
 
 下次继续请先读 **`docs/HANDOFF.md`**。改动分级与裁剪建议见 `docs/MANIFEST.md`。

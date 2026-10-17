@@ -12,7 +12,7 @@ index c5a704f..44e2cb1 100644
 +  DEVICE_DTS := mt7987a-hiveton-h5000m
 +  DEVICE_DTS_DIR := ../dts
 +  DEVICE_DTC_FLAGS := --pad 4096
-+  DEVICE_PACKAGES := mt7987-2p5g-phy-firmware kmod-sfp blkid e2fsprogs f2fsck mkf2fs
++  DEVICE_PACKAGES := mt7987-2p5g-phy-firmware blkid e2fsprogs f2fsck mkf2fs
 +  KERNEL_LOADADDR := 0x40080000
 +  KERNEL := kernel-bin | lzma | fit lzma $$(KDIR)/image-$$(firstword $$(DEVICE_DTS)).dtb
 +  KERNEL_INITRAMFS := kernel-bin | lzma | \

@@ -2,3 +2,8 @@
 /artifacts/
 *.log
 .DS_Store
+
+# 本地覆盖用的配置片段（build.sh 会把它追加到 .config 之后）。
+# 属于「你自己机器上的覆盖」，默认不入库，避免误提交；
+# 真要提交请用 git add -f。参见 docs/5G-MODEM.md。
+configs/h5000m.extra

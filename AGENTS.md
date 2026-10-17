@@ -155,7 +155,10 @@ done
 5 个 Makefile 加了 `PKG_SOURCE_URL`/`PKG_HASH`（`mt_wifi7`/`mt_hwifi`/`mt_wifi_osal`/`warp`/`datconf`）；
 删掉 TL-7DR7230（MT7988）与 3 个第三方 LuCI（`luci-app-mwan3helper-chinaroute`/`luci-app-wrtbwmon`/`wrtbwmon`）；
 新增 3 个板级脚本（`board.d/02_higowrt`、`uci-defaults/99-higowrt-fan`、`usr/bin/higowrt-modem-check`）；
-删掉 defconfig 里 2 行指向已删包的 `# ... is not set`。
+删掉 defconfig 里 2 行指向已删包的 `# ... is not set`；
+**打补丁后的 `target/linux/mediatek/image/filogic.mk` 与原仓库不同** —— H5000M 的
+`DEVICE_PACKAGES` 去掉了死重量的 `kmod-sfp`（DTS 里没有 sfp 节点）。这是目前
+**唯一**一处补丁结果的意图性差异，出现属正常。
 
 ---
 
@@ -196,6 +199,18 @@ done
   `config` 子项（feed `net/knot-resolver/Makefile` 里确有），打开会拉进
   约 5 MB 的递归 DNS 解析器（+ knot-libs/luajit/libgnutls/libstdcpp/libuv1/lmdb/
   libnghttp2/libprotobuf-c/libfstrm/luasocket），本设备用不到。
+- **7 个 `trusted-firmware-a-mt798{1,6,7,8}-ram-*` 是故意关的，别打开**：实测它们只把
+  `*-bl2.bin` 散落到 `bin/targets/`，**不进 rootfs、也没有任何设备引用**
+  （H5000M 只用 FIT，刷机流程不动 bootloader）。打开纯粹白烧构建时间。
+- **`kmod-sfp` 是故意移除的，别加回来**：H5000M 的 DTS 里**没有任何 sfp 节点**
+  （4 个口都是 `2500base-x` + 真实 2.5G PHY）。`DEVICE_PACKAGES` 里原来那个是从
+  MTK 参考设计抄来的，已从 `patches/0003` 和 config 同步清掉。
+- **`CONFIG_PACKAGE_f2fsck` 必须保持 `=y`**：`patches/0003` 的 `DEVICE_PACKAGES` 声明了
+  `e2fsprogs f2fsck mkf2fs`（官方 filogic 设备的三件套）。关掉会让 `profiles.json`
+  与镜像不一致，且丢掉 **`resize.f2fs`**（f2fs overlay 首启扩容要用）。
+- **`wireless-tools` / `ubi-utils` 不能砍**：前者被原厂 `/sbin/wifi`（`wifi_jedi`）
+  直接调 `iwconfig`，后者被 `package/base-files/files/lib/upgrade/nand.sh` 调 `ubiformat`。
+  看着像遗留包，其实有调用方 —— 砍包前先 grep 调用方。
 
 ---
 
@@ -231,9 +246,20 @@ fix(h5000m): 互换 LAN/WAN — eth0(RTL8221)=WAN, eth1(内置2.5G)+hnat=LAN
 - ⚠️ **`gcc-multilib`/`g++-multilib` 在 arm64 上不存在**：`build-docker.sh` 已按
   `dpkg --print-architecture` 条件安装，别改回无条件安装（会让容器里 apt 直接失败）。
 - ⚠️ 容器里没有 `shasum` 的可能性（属 `perl` 包）→ 脚本里校验一律**优先 `sha256sum`**，回退 `shasum`。
-- 链接 `mt_wifi.ko`（≈45 MB）吃内存，建议 ≥8 G；不足时 `JOBS=2`。
-- 本机**没有**那 3 个专有 tarball，所以「完整编译」尚未跑过；Wi-Fi 也**从未在真机上验证**过
-  （原移植在 x86 VM 上完成）。首刷建议先用 `*-recovery.itb` 内存启动确认，再写 eMMC。
+- ✅ **半量验证构建已跑通**（详见 `docs/HANDOFF.md` §1.9）：`tools` / toolchain / 内核 /
+  DTS / 补丁 / feeds / LuCI / 5G 选包 / 镜像打包全部真编通过 → **除 vendor tarball 外不缺任何工具**，
+  `build-docker.sh` 里那套 apt 包就是全集，不要再往上加。
+- ⚠️ 缺的就是那 3 个 tarball 对应的 10 个 vendor kmod → **目前还没出过可刷机的固件**。
+- 链接 `mt_wifi.ko`（≈45 MB）吃内存，建议 ≥8 G；不足时 `JOBS=2`，12 G 的 VM 上建议 `JOBS=4`。
+- ⚠️ **并行度过高会「无声失败」**：12 G VM 上 `-j6` 时 TF-A 的某个变体和 `linux-firmware`
+  都出现过「日志里一行错误文本都没有直接失败」，`-j1` 重编即过且无 OOM。先降并行度重试，
+  不要一头扎进代码里找问题。
+- ⚠️ **增量构建会残留陈旧产物**：`bin/targets` 只增不减（实测残留过 `kmod-sfp-*.apk`
+  和 7 个 `*-bl2.bin`）；`profiles.json` 的生成脚本在**版本号不变时会沿用旧文件**（上游设计）。
+  **判断配置是否真的生效，看 `.manifest` 和 `tmp/.targetinfo`，不要看 `profiles.json`。**
+  `build-docker.sh` 已在拷贝前清空 `artifacts/`。
+- 本机**没有**那 3 个专有 tarball；Wi-Fi 与 5G **从未在真机上验证**过（原移植也是 x86 VM 上完成的）。
+  首刷建议先用 `*-recovery.itb` 内存启动确认，再写 eMMC。
 - 那 3 个 tarball **无法从公开渠道获取**（MTK 授权 SDK；公开镜像 `mediatek/mtk-openwrt-feeds`
   里没有 wifi7/osal/warp 驱动源码）→ 只能由本人提供。
 - CI 需要配置 secret `VL_REPO` / `VL_TOKEN`（私有 Release 镜像）或 `DL_BASE_URL`，否则拿不到 tarball 必然失败。

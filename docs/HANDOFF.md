@@ -157,7 +157,105 @@ overlay/package/mtk/drivers/wifi-profile/files/mt7992-be5400/l1profile.dat
 - `CONFIG_PACKAGE_TAR_*` 6 个符号看着可疑，实际是 feed 里 `tar` 包的 `config` 子项
   （`default y`、不依赖父包），属正常，不是残留。
 - `trusted-firmware-a-mt7981-*` 等 7 个其它 SoC 的 TF-A **只进 `BIN_DIR`/staging、
-  不进 rootfs**，只影响构建时间（可作后续精简项，但未验证过，暂不动）。
+  不进 rootfs**，只影响构建时间（**已在 §1.9 验证并关闭**）。
+
+---
+
+### 1.9 真实编译验证（已完成）
+
+> 专有 tarball 仍然拿不到，但用**半量验证**跑通了整条链路：临时关掉 10 个依赖那 3 个
+> tarball 的 vendor kmod，其余全部真编。**结论：除 vendor tarball 本身，什么都不缺。**
+
+**环境结论：不需要再装任何工具。** `build-docker.sh` 里那套 apt 包
+（`build-essential clang flex bison g++ gawk gettext git libncurses-dev libssl-dev
+python3-setuptools rsync unzip zlib1g-dev file wget qemu-utils ccache libelf-dev patch sudo`）
+在 arm64 Ubuntu 24.04 上就是 OpenWrt 要求的全集，多一个也不用。两个真正的坑都不是
+「缺包」：`FORCE_UNSAFE_CONFIGURE=1`（root 身份编译，已修进脚本）、
+VM 内存偏小导致 `-j6 × -j6` 过订阅偶发失败（用 `JOBS=4` 规避）。
+
+**真实产物（半量验证版本，无 Wi-Fi 驱动）**
+
+| 项 | 值 |
+|---|---|
+| 装机包数 | 213 |
+| rootfs 解压后 | 40.5 MB |
+| `…-initramfs-recovery.itb` | 11.4 MB |
+| `…-squashfs-sysupgrade.bin` | 12.1 MB |
+
+> 加上 `mt_wifi.ko`(≈45 MB) 后，真实 rootfs 约 85 MB。
+
+**rootfs 体积分布（实测）**
+
+| 位置 | 体积 |
+|---|---|
+| `/usr/lib` | 17.1 MB |
+| `/usr/sbin` | 6.8 MB |
+| `/lib/modules` | 2.8 MB |
+| `/www`（LuCI） | 1.8 MB |
+| `/etc`（含 `wifi-profile` 的 728 KB `.dat`） | 1.3 MB |
+
+单文件最大的是 **5G 管理栈**：`libqmi-glib.so` 3.2 MB、`ModemManager` 2.5 MB、
+`libgio` 1.8 MB、`libglib`/`libmm-glib` 各 1.2 MB、`libmbim-glib` 0.9 MB、
+`/lib/network/wwan` 1.4 MB，合计 **≈12 MB（rootfs 的 30%）**。
+这块**刻意不动**：等真机确认模组走 QMI 还是 MBIM/MHI 之后再砍。
+
+**本轮精简 / 修正**
+
+1. 🧹 **关掉 7 个 `trusted-firmware-a-mt798{1,6,7,8}-ram-*`**。实测它们只把
+   `*-bl2.bin` 散落到 `bin/targets/`，**既不进 rootfs、也没有任何设备引用**
+   （H5000M 设备定义只用 FIT，刷机流程明确不动 bootloader）。纯构建时间浪费。
+2. 🧹 **移除 `kmod-sfp`**。H5000M 的 DTS 里**没有任何 sfp 节点**（4 个口都是
+   `2500base-x` + 真实 2.5G PHY），设备定义里那个是从 MTK 参考设计抄来的。
+   `patches/0003` 与 config 同步清掉（含 `CONFIG_DEFAULT_kmod-sfp`）。
+3. 🔴 **`f2fsck` 纠正为 `=y`**。设备定义一直声明 `e2fsprogs f2fsck mkf2fs`（官方
+   filogic 设备普遍是这个三件套），但这份 config 把它关着 → `profiles.json` 对外
+   声明有、镜像里却没有。`f2fsck` 不只给 `fsck.f2fs`，还有 **`resize.f2fs`**
+   （f2fs overlay 首启扩容要用），属真缺口而非可选项。
+4. 🔴 **`build-docker.sh` 拷贝产物前先清空 `artifacts/`**。命名卷是持久化的，
+   `bin/targets` 只增不减：被 config 关掉后不再生成的包（`kmod-sfp-*.apk`）和
+   `*-bl2.bin` 会一直躺在 `artifacts/` 里，可能混进发布物。顺带把原来的
+   `cp ... || true` 改成「找不到 manifest 就报错退出」，不再静默吞掉失败。
+
+**顺带确认「不能砍」的两个包**（差点误删，已逐个查过调用方）
+
+| 包 | 为什么必须留 |
+|---|---|
+| `wireless-tools` | 原厂 `/sbin/wifi`（=`wifi_jedi`，Lua）里直接调 `iwconfig` |
+| `ubi-utils` | `package/base-files/files/lib/upgrade/nand.sh` 里调 `ubiformat` 等 |
+
+**验证方法与残留说明**：`bin/targets` 是增量目录，`profiles.json` 的生成脚本
+（`json_overview_image_info.py`）在**版本号不变时会沿用旧文件**（上游设计），
+所以增量构建里它的 `device_packages` 可能滞后。判断配置是否真的生效，应以
+`make` 产出的 `.manifest` 和 `tmp/.targetinfo` 为准；干净构建（CI）没有这个问题。
+
+**「无 vendor tarball」半量验证构建怎么做（可随时复现）**
+
+```bash
+# 1) 造 3 个占位 tarball —— build.sh 只检查这 4 个文件「存在」，
+#    而 dl/SHA256SUMS 里目前只有 datconf，所以占位文件不会被校验内容。
+for f in mt7993_20250919-39602c.tar.xz warp_20250919-9c1cfa.tar.xz \
+         mt_wifi_osal-a53418.tar.xz; do echo placeholder > "dl/$f"; done
+
+# 2) 关掉依赖那 3 个 tarball 的 10 个 vendor kmod
+#    （写进 configs/h5000m.extra，build.sh 会自动追加；该文件已在 .gitignore 里）
+cat > configs/h5000m.extra <<'EOF'
+# CONFIG_PACKAGE_kmod-mt_wifi7 is not set
+# CONFIG_PACKAGE_kmod-mt_wifi_osal is not set
+# CONFIG_PACKAGE_kmod-mt_hwifi is not set
+# CONFIG_PACKAGE_kmod-warp is not set
+# CONFIG_PACKAGE_kmod-mtk_pci is not set
+# CONFIG_PACKAGE_kmod-mtk_wed is not set
+# CONFIG_PACKAGE_kmod-connac_if is not set
+# CONFIG_PACKAGE_kmod-mt7992 is not set
+# CONFIG_PACKAGE_kmod-mt7992_dbg is not set
+# CONFIG_PACKAGE_kmod-mt799a is not set
+EOF
+
+scripts/build-docker.sh
+```
+
+⚠️ 这样出的镜像**没有 Wi-Fi 驱动，只能用来做编译验证，不能刷机**。验证完记得
+把 `configs/h5000m.extra` 和 `dl/` 里的占位文件删掉。
 
 ---
 
@@ -243,22 +341,28 @@ CI：`.github/workflows/build.yml` 支持手动触发 / 每周定时 / 打 `v*` 
 
 ## 5. 待办 / 未验证（下次优先）
 
-- [ ] **未做完整编译**：只验证了「overlay + patches 能干净贴上官方树」+ 静态核对（见 §1.8）。
-      编译环境已就绪（Colima，见 §1.8），但 **3 个 MTK 专有 tarball 暂时拿不到**（本机没有、
-      MTK 官方 feed 需授权、公开镜像 `mediatek/mtk-openwrt-feeds` 不含 wifi7/osal/warp 驱动源码）。
-      **拿到 tarball 后第一件事就是跑一次 `scripts/build.sh`**。
-- [ ] 待 tarball 到位前可先做的**半量验证**：临时把 4 个 vendor 驱动包
-      （`kmod-mt_wifi7` / `kmod-mt_hwifi` / `kmod-mt_wifi_osal` / `kmod-warp`）关掉后跑全量构建 →
-      能验证 toolchain / 内核 / DTS / 全部补丁 / feeds / 5G 选包 / LuCI，并拿到**真实 rootfs 包清单与体积**；
-      真正编译不了的只剩那 4 个驱动包。
+- [x] ~~半量验证构建~~：**已完成**（见 §1.9）。整条链路（tools / toolchain / 内核 / DTS /
+      全部补丁 / feeds / LuCI / 5G 选包 / 镜像打包）真编通过，并拿到真实包清单与体积。
+- [ ] **完整编译（带 10 个 vendor kmod）仍未做**：缺的就是那 3 个 MTK 专有 tarball
+      （本机没有、MTK 官方 feed 需授权、公开镜像 `mediatek/mtk-openwrt-feeds` 不含
+      wifi7/osal/warp 源码）。**拿到后第一件事：放进 `dl/` → `scripts/set-vendor-hashes.sh`
+      → 删掉临时片段 `configs/h5000m.extra` 与 `dl/` 里的占位 tarball → `scripts/build.sh`**
+      （见 §3.1）。
 - [ ] **上真机验证 Wi-Fi SKU**：默认 `BE5040`；若频段异常，用 `SKU=BE3600SDB CLEAN_CHIP=1 scripts/build.sh` 出第二包 A/B（见 §1.5）。
 - [ ] 把专有 tarball 放到私有 Release，并在 GitHub 配好 secret `VL_REPO`/`VL_TOKEN`（或设仓库 Variable `SKU` 切换 SKU）。
 - [ ] `patches/0006` 把 `MEDIATEK_NETSYS_*` 放进 `generic/config-6.12`（影响所有 target），可评估只留在 `mediatek/filogic`。
-- [ ] 进一步裁剪 `overlay`（**保守，等上机确认后再做**）：`mt798x-2p5g-phy-firmware-internal`、未用到的 DSA/PHY（`mxl862xx`/`mt753x`/`an8855`/`an8801`）、USB xhci-mtk 厂商测试码。
+- [ ] 进一步裁剪 `overlay`（**保守，等上机确认后再做**）：`mt798x-2p5g-phy-firmware-internal`、
+      未用到的 DSA/PHY（`mxl862xx`/`mt753x`/`an8855`/`an8801`）、USB xhci-mtk 厂商测试码。
+      （纯构建期浪费的 7 个 TF-A 包、以及死重量 `kmod-sfp` 已在 §1.9 处理掉。）
+- [ ] **5G 管理栈精简（≈12 MB，占 rootfs 30%）**：已决定**等真机验证过再砍**。届时按
+      `higowrt-modem-check` 实测结果决定保留 QMI / MBIM / MHI 中的哪几套。
+      备选档位：只留 QMI → 省 `libmbim-glib` 0.9 MB + `umbim` + `kmod-mhi-*`；
+      更激进可连 `ModemManager` 2.5 MB + `dbus` 一起砍、改用 netifd 直连 QMI。
 - [ ] 评估是否改回**标准 wifi 栈**（弃 `wifi-profile`/`luci-app-mtk`/`datconf`/`mwctl`，删 `patches/0008`）。
       ⚠️ 注意：`MIGRATION_ISSUES.md` §7 写着「已禁用 wifi-profile」，但**原仓库最终代码是启用它的**（`wifi-scripts/Makefile` 里那句 `rm -f /sbin/wifi` 就是为它让路），本仓库按**原代码**保留。§7 那段是历史记录，不可作为依据。
 - [ ] `NO_BRAND=1` 与 `common.extra` 至少各出一次固件做对比。
-- [ ] 5G 模组：上机确认 `higowrt-modem-check` 输出，按实测精简 `common.extra`。
+- [ ] 5G 模组上机验证：跑 `higowrt-modem-check` 看 USB / 串口 / QMI / MBIM 的实际形态，
+      再按上面那条决定精简到哪一档。
 
 ---
 
@@ -277,6 +381,20 @@ CI：`.github/workflows/build.yml` 支持手动触发 / 每周定时 / 打 `v*` 
 5. 链接 `mt_wifi.ko`(≈45MB) 吃内存，建议 ≥8G（CI runner 足够）。
 6. LED：若驱动 `MTK_WIFI7_LED_CONTROL_SUPPORT` 自己点灯，`board.d/02_higowrt` 的 netdev 触发可能冲突，不确定就删该文件。
 7. 风扇：`99-higowrt-fan` 只写低速下限、**不改 `pwm1_enable`**，不影响 thermal；要停用直接删文件。
+8. **增量构建的陈旧产物**：`bin/targets` **只增不减** —— 被 config 关掉后不再生成的包和镜像
+   会留在原地（实测残留过 `kmod-sfp-*.apk` 和 7 个 `*-bl2.bin`，并因此混进了 `artifacts/`）。
+   更隐蔽的是 `profiles.json`：它的生成脚本 `json_overview_image_info.py` 在**版本号不变时
+   会沿用旧文件**（上游设计，见顶层 `Makefile` 的 `WORK_DIR=$(BUILD_DIR)/json_info_files`），
+   所以增量构建里它的 `device_packages` 可能是滞后的。**判断配置是否生效要看 `.manifest`
+   和 `tmp/.targetinfo`，别信 `profiles.json`**；干净构建（CI）没有这个问题。
+9. **不要开 `CONFIG_BUILD_LOG`**：本树的 `CONFIG_BUILD_LOG_DIR` 是空符号，写
+   `CONFIG_BUILD_LOG=y` 会被静默丢弃（拿不到日志）；而 `BUILD_LOG` 会给 make 注入 `-d`，
+   把日志彻底淹掉。要定位失败包，直接跑
+   `make package/<路径>/compile V=s -j1`（datconf 那次就是这么定位的）。
+10. **并行度过高会「无声失败」**：12 G 的 VM 上 `-j6` 时，`arm-trusted-firmware-mediatek`
+    的某个变体和 `linux-firmware` 都出现过「日志里一行错误文本都没有就直接失败」，
+    而 `-j1` 重编就过、`dmesg` 里没有 OOM。遇到这种失败先降并行度重试（`JOBS=4`），
+    不要一头扎进代码里找问题。
 
 ---
 

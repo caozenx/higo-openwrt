@@ -69,7 +69,21 @@ docker run --rm \
   '
 
 echo "==> 拷贝产物到 ./artifacts/$PROFILE/"
+# 必须先清空：$VOLUME 是持久化命名卷，bin/targets 里会残留上一次构建的产物
+# （例如后来被 config 关掉、不再生成的包与 *-bl2.bin 镜像）。
+# 只拷贝不清空的话，这些陈旧文件会一直留在 ./artifacts 里，可能混进发布物 ——
+# 由此产生的「profiles.json 里还写着已删除的包」也是同一类问题。
+rm -rf "$REPO_DIR/artifacts/$PROFILE"
 mkdir -p "$REPO_DIR/artifacts/$PROFILE"
 docker run --rm -v "$VOLUME":/build -v "$REPO_DIR/artifacts/$PROFILE":/out \
-  "$IMAGE" bash -lc 'cp -av /build/openwrt/bin/targets/mediatek/filogic/* /out/ 2>/dev/null || true'
+  "$IMAGE" bash -lc '
+    set -euo pipefail
+    src=/build/openwrt/bin/targets/mediatek/filogic
+    ls "$src"/*.manifest >/dev/null 2>&1 || {
+      echo "错误：$src 下没有 manifest，构建可能没真正产出镜像" >&2
+      ls -l "$src" 2>/dev/null >&2 || true
+      exit 1
+    }
+    cp -a "$src"/. /out/
+  '
 ls -lh "$REPO_DIR/artifacts/$PROFILE/"
